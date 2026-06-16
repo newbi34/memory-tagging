@@ -1,49 +1,39 @@
-#include <vector>
-#include <cstdint>
+#include <iostream>
 #include "two_level_table.cpp"
 
-class Memory {
-public:
-    Memory(size_t size) : mem_(size, 0) {}
-
-    uint8_t* allocate(uint64_t addr, size_t size) {
-        if (size > mem_.size()) return nullptr; // not enough memory
-        return mem_.data() + addr; // return pointer to start of chunk (for simplicity, no actual allocation logic)
-    }
-
-private:
-    std::vector<uint8_t> mem_;
-};
-
 int main() {
-    Memory mem(1024 * 1024); // 1MB memory
-    TwoLevelTable tag_table(1024 * 1024); // support for 1MB memory
+    TwoLevelTable memory(1024 * 1024); // 1MB memory
 
-    uint8_t* ptr = mem.allocate(64, 64); // allocate 64 bytes
-    ptr[0] = 0xFF; // write to allocated memory
-    uint64_t addr = 64;
+    uint64_t ptr = memory.alloc(4, 5); // allocate 4 bytes
+    std::cout << "Allocated at: 0x" << std::hex << ptr << std::endl;
+    const uint8_t data[4] = {0xFF, 0xEE, 0xDD, 0xCC}; // sample data
+    memory.write(ptr, data, 4); // write data
+    uint64_t addr = ptr;
+
     if (addr) {
-        tag_table.tag_alloc(addr, 64, 0xAB); // tag with 0xAB
-
-        if (tag_table.check_tag(addr, 0xAB)) {
-            printf("Tag check passed! value: %02X\n", ptr[0]);
+        if (memory.check_tag(addr, 5)) {
+            std::cout << "Tag check passed! value: 0x" << static_cast<int>(memory.read(addr)[0]) << std::endl;
         } else {
-            printf("Tag check failed!\n");
+            std::cout << "Tag check failed!" << std::endl;
         }
 
-        if (tag_table.check_tag(addr, 0xCD)) {
-            printf("Tag check passed with wrong tag! value: %02X\n", ptr[0]);
+        if (memory.check_tag(addr, 6)) {
+            std::cout << "Tag check passed with wrong tag! value: 0x" << static_cast<int>(memory.read(addr)[0]) << std::endl;
         } else {
-            printf("Tag check correctly failed with wrong tag!\n");
+            std::cout << "Tag check correctly failed with wrong tag!" << std::endl;
         }
 
-        if (tag_table.check_tag(addr + 16, 0xAB)) {
-            printf("Tag check passed for next granule! value: %02X\n", ptr[16]);
+        if (memory.check_tag(addr + 12, 5)) {
+            std::cout << "Tag check passed for next granule! value: 0x" << static_cast<int>(memory.read(addr + 12)[0]) << std::endl;
         } else {
-            printf("Tag check failed for next granule!\n");
+            std::cout << "Tag check failed for next granule!" << std::endl;
         }
-        
-        tag_table.free_alloc(addr); // free allocation
+
+        memory.print_overhead_bytes(); // print overhead
+
+        memory.free(addr); // free allocation
+
+        memory.print_stats(); // print stats after free
     }
 
     return 0;

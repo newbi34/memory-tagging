@@ -1,83 +1,80 @@
-#include "structure_interface.h"
-#include <vector>
-#include <unordered_map>
+#include "memory.h"
+#include <iostream>
 
-// Default tag is 0, means untagged memory. Each tag is 1 byte big and is valid for 16 bytes, so we can store 256 tags in a 4KB page.
-
-class TwoLevelTable : ITaggingImpl {
+class TwoLevelTable : public Memory {
 public:
-    TwoLevelTable(uint64_t mem_size) {
-        table_.resize(mem_size / 4096); // 4KB pages
-    }
+    TwoLevelTable(size_t mem_size)
+        : Memory(mem_size),
+          num_pages_(mem_size / 4096),
+          table_(new uint8_t*[mem_size / 4096]()) {}
 
     ~TwoLevelTable() {
-        table_.clear();
+        for (size_t i = 0; i < num_pages_; ++i)
+            delete[] table_[i];
+        delete[] table_;
     }
 
-    void tag_alloc(uint64_t addr, size_t size, uint8_t tag) override {
-        alloc_sizes_[addr] = size;  
-
-        size_t granules = (size + 15) / 16; // round up
-        for (size_t i = 0; i < granules; ++i) {
-            uint64_t cur_addr = addr + i * 16;
-            uint64_t page_index = cur_addr / 4096;
-            uint64_t offset = (cur_addr % 4096) / 16;   
-
-            if (page_index >= table_.size()) break; // out of covered range 
-
-            if (table_[page_index].empty())
-                table_[page_index].resize(256, 0);  
-
-            table_[page_index][offset] = tag;
-        }
-        alloc_sizes_[addr] = size; // store size for free
+    uint64_t alloc(size_t size, uint8_t tag) override {
+        uint64_t addr = Memory::alloc(size, tag); // base allocator
+        if (addr == INVALID) return INVALID;
+        tag_range(addr, size, tag); // tag it
+        return addr;
     }
 
-    bool check_tag(uint64_t addr, uint8_t expected_tag) override {
+    void free(uint64_t addr) override {
+        size_t size = alloc_size(addr); // read size before zeroing
+        tag_range(addr, size, 0); // clear tags
+        Memory::free(addr); // free memory
+    }
+
+    bool check_tag(uint64_t addr, uint8_t expected) override {
         uint64_t page_index = addr / 4096;
         uint64_t offset = (addr % 4096) / 16;
-
-        if (page_index >= table_.size() || table_[page_index].empty()) {
+        if (page_index >= num_pages_ || table_[page_index] == nullptr)
             return false;
-        }
-
-        return table_[page_index][offset] == expected_tag; // single granule
+        stats_.tag_accesses++;
+        stats_.total_accesses++;
+        return table_[page_index][offset] == expected;
     }
-
-    void free_alloc(uint64_t addr) override {
-        auto it = alloc_sizes_.find(addr);
-        if (it == alloc_sizes_.end()) return; // unknown allocation
-
-        size_t size = it->second;
-        uint64_t page_index = addr / 4096;
-        uint64_t offset = (addr % 4096) / 16;
-
-        size_t granules = (size + 15) / 16; // round up to granule boundary
-        for (size_t i = 0; i < granules; ++i) {
-            uint64_t cur_page = (addr + i * 16) / 4096;
-            uint64_t cur_offset = ((addr + i * 16) % 4096) / 16;
-            if (cur_page < table_.size() && !table_[cur_page].empty()) {
-                table_[cur_page][cur_offset] = 0; // zero = untagged
-            }
-        }
-        alloc_sizes_.erase(it);
-    }  
 
     size_t get_overhead_bytes() const override {
-        size_t overhead = 0;
-        overhead += table_.capacity() * sizeof(std::vector<uint8_t>); // level 1
-        for (const auto& page : table_) {
-            if (!page.empty()) {
-                overhead += 256; // level 2 arrays
-            }
-        }
-        overhead += alloc_sizes_.size() * (sizeof(uint64_t) + sizeof(size_t)); // metadata map
+        size_t overhead = num_pages_ * sizeof(uint8_t*);
+        for (size_t i = 0; i < num_pages_; ++i)
+            if (table_[i]) overhead += 256;
         return overhead;
+    }
+
+    void print_overhead_bytes() {
+        size_t overhead1 = num_pages_ * sizeof(uint8_t*);
+        size_t overhead2 = 0;
+        for (size_t i = 0; i < num_pages_; ++i)
+            if (table_[i]) overhead2 += 256;
+        std::cout << std::dec << "Level 1 table bytes: " << overhead1 << std::endl;
+        std::cout << std::dec << "Level 2 table bytes: " << overhead2 << std::endl;
+        std::cout << std::dec << "Total overhead bytes: " << overhead1 + overhead2 << std::endl;
     }
 
     std::string name() const override { return "TwoLevelTable"; }
 
+    AccessStats get_stats() const override { return stats_; }
+    void reset_stats() override { stats_ = AccessStats(); }
+
 private:
-    std::vector<std::vector<uint8_t>> table_;
-    std::unordered_map<uint64_t, size_t> alloc_sizes_; // addr to size
+    void tag_range(uint64_t addr, size_t size, uint8_t tag) {
+        size_t granules = (size + 15) / 16;
+        for (size_t i = 0; i < granules; ++i) {
+            uint64_t cur = addr + i * 16;
+            uint64_t page_index = cur / 4096;
+            uint64_t offset = (cur % 4096) / 16;
+            if (page_index >= num_pages_) break;
+            if (!table_[page_index])
+                table_[page_index] = new uint8_t[256]();
+            table_[page_index][offset] = tag;
+        }
+        stats_.tag_accesses += granules;
+        stats_.total_accesses += granules;
+    }
+
+    size_t num_pages_;
+    uint8_t** table_;
 };

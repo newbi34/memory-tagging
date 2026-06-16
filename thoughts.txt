@@ -1,0 +1,1 @@
+simulated memory: very simple alloc, simple free, we keep allocation size metadata before the pointer to the allocation, like C alloc.
