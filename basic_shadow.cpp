@@ -1,5 +1,4 @@
 #include "memory.h"
-#include <iostream>
 
 class BasicShadow : public Memory {
 public:

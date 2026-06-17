@@ -1,5 +1,4 @@
 #include "memory.h"
-#include <iostream>
 
 class TwoLevelTable : public Memory {
 public:
@@ -55,7 +54,6 @@ public:
     }
 
     std::string name() const override { return "TwoLevelTable"; }
-
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
 
@@ -71,8 +69,8 @@ private:
                 table_[page_index] = new uint8_t[256]();
             table_[page_index][offset] = tag;
         }
-        stats_.tag_accesses += granules;
-        stats_.total_accesses += granules;
+        //stats_.tag_accesses += granules;
+        //stats_.total_accesses += granules;
     }
 
     size_t num_pages_;

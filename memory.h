@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <iostream>
 
 class AccessStats
 {
@@ -35,13 +36,15 @@ public:
     void free(uint64_t addr) override;
     void write(uint64_t addr, const uint8_t *data, size_t size);
     uint8_t *read(uint64_t addr);
+
     void print_stats() const;
-    
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
+
     bool check_tag(uint64_t, uint8_t) override { return true; }
     size_t get_overhead_bytes() const override { return 0; }
     std::string name() const override { return "Memory"; }
+    virtual void print_overhead_bytes() = 0;
 
 protected:
     static constexpr uint64_t INVALID = ~0ULL;

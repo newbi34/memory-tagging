@@ -1,1 +1,2 @@
-simulated memory: very simple alloc, simple free, we keep allocation size metadata before the pointer to the allocation, like C alloc.
+-simulated memory: very simple alloc, simple free, we keep allocation size metadata before the pointer to the allocation, like C alloc.
+-theoretical analisis of caches, accesses.
