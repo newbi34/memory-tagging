@@ -17,6 +17,12 @@ public:
         uint64_t addr = Memory::alloc(size, tag); // base allocator
         if (addr == INVALID) return INVALID;
         tag_range(addr, size, tag); // tag it
+
+        // update peak after every insert
+        size_t current = get_overhead_bytes();
+        if (current > stats_.peak_overhead_bytes)
+            stats_.peak_overhead_bytes = current;
+
         return addr;
     }
 

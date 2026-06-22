@@ -21,6 +21,12 @@ public:
 		uint64_t addr = Memory::alloc(size, tag);
 		if (addr == INVALID) return INVALID;
 		root_ = insert(root_, addr, size, tag);
+
+        // update peak after every insert
+        size_t current = get_overhead_bytes();
+        if (current > stats_.peak_overhead_bytes)
+            stats_.peak_overhead_bytes = current;
+
 		return addr;
 	}
 

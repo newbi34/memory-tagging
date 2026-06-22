@@ -13,6 +13,7 @@ public:
     uint64_t alloc_count = 0;
     uint64_t free_count = 0;
     uint64_t bytes_allocated = 0;
+    uint64_t peak_overhead_bytes = 0;
 };
 
 class ITaggingImpl

@@ -45,7 +45,7 @@ public:
                              (w.include_free_cycle ? 1 : 0));
         result.throughput_ops_sec = ops_per_run / (avg / 1e9);
 
-        result.memory_overhead_bytes = mem.get_overhead_bytes();
+        result.memory_overhead_bytes = mem.get_stats().peak_overhead_bytes;
 
         return result;
     }
