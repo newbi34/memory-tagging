@@ -1,2 +1,8 @@
 -simulated memory: very simple alloc, simple free, we keep allocation size metadata before the pointer to the allocation, like C alloc.
 -theoretical analisis of caches, accesses.
+-cite recieved hash constants.
+-cuckoo hash: more often we alloc some memory and then frequently use it as opposed to continuous alloc -> free cycle, so O(1) look up is very important and O(log n) worst case inserting (then we rehash).
+
+questions:
+-kako meriti dostope
+-cuckoo bucket?

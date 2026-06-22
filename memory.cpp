@@ -10,32 +10,29 @@ uint64_t Memory::alloc(size_t size, uint8_t tag) {
     uint64_t addr = find_free_block(size);
     if (addr == INVALID) return INVALID;
 
-    // Write size into 4-byte header before the data
     uint32_t size_header = static_cast<uint32_t>(size);
     std::memcpy(&buffer_[addr], &size_header, sizeof(size_header));
 
-    for (size_t i = 0; i < size + sizeof(uint32_t); ++i) {
+    // total bytes to mark = header + size, rounded up to granule boundary
+    size_t total = (sizeof(uint32_t) + size + 15) & ~size_t(15);
+    for (size_t i = 0; i < total; ++i)
         allocated_[addr + i] = true;
-    }
 
     stats_.alloc_count++;
     stats_.bytes_allocated += size;
 
-    return addr + sizeof(uint32_t); // return pointer past header
+    return addr + sizeof(uint32_t);
 }
 
-void Memory::free(uint64_t addr)  {
-    // Step back over header to find block start
+void Memory::free(uint64_t addr) {
     uint64_t block = addr - sizeof(uint32_t);
     uint32_t alloc_size = 0;
     std::memcpy(&alloc_size, &buffer_[block], sizeof(alloc_size));
 
-    // Zero out header + data
-    std::memset(&buffer_[block], 0, sizeof(uint32_t) + alloc_size);
-
-    for (size_t i = 0; i < alloc_size + sizeof(uint32_t); ++i) {
+    size_t total = (sizeof(uint32_t) + alloc_size + 15) & ~size_t(15);
+    std::memset(&buffer_[block], 0, total);
+    for (size_t i = 0; i < total; ++i)
         allocated_[block + i] = false;
-    }
 
     stats_.free_count++;
     stats_.bytes_allocated -= alloc_size;
@@ -53,7 +50,7 @@ uint8_t* Memory::read(uint64_t addr) {
     return &buffer_[addr];
 }
 
-void Memory::print_stats() const {
+void Memory::print_stats() {
     auto s = get_stats();
     std::cout << "[" << name() << "]\n"
           << "  total accesses  : " << s.total_accesses  << "(total times gone to memory)" << "\n"
@@ -71,13 +68,19 @@ size_t Memory::alloc_size(uint64_t addr) const {
 }
 
 uint64_t Memory::find_free_block(size_t size) {
-    // Linear scan: look for a run of zeros big enough for 4-byte header + data
-    size_t needed = sizeof(uint32_t) + size;
+    size_t needed = (sizeof(uint32_t) + size + 15) & ~size_t(15); // round up to granule
     size_t run = 0;
-    for (size_t i = 0; i < size_; ++i) {
-        run = (!allocated_[i]) ? run + 1 : 0;
-        if (run >= needed)
-            return i - needed + 1;
+    size_t run_start = 0;
+
+    for (size_t i = 0; i < size_; i += 16) {
+        if (!allocated_[i]) {
+            if (run == 0) run_start = i; // mark where run began
+            run += 16;
+            if (run >= needed)
+                return run_start; // always return start of run
+        } else {
+            run = 0; // reset - occupied chunk
+        }
     }
     return INVALID;
 }

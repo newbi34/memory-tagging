@@ -1,0 +1,16 @@
+impl,workload,avg_latency_ns,min_latency_ns,max_latency_ns,stddev_latency_ns,throughput_ops_sec,memory_overhead_bytes,live_allocations,correctness_violations
+TwoLevelTable,small_allocs,2.92173e+06,2.7955e+06,4.8527e+06,444736,3.42263e+06,137216,2000,0
+BalancedTree,small_allocs,3.09838e+06,2.9879e+06,3.9287e+06,251852,3.22749e+06,0,2000,0
+CuckooHashTable,small_allocs,2.98638e+06,2.9163e+06,3.2987e+06,86839.4,3.34853e+06,131072,2000,0
+TwoLevelTable,large_allocs,6.00478e+06,5.6963e+06,6.2752e+06,174850,141554,336128,50,0
+BalancedTree,large_allocs,5.80904e+06,4.7641e+06,6.0493e+06,302425,146324,0,50,0
+CuckooHashTable,large_allocs,1.30828e+07,1.17463e+07,1.96533e+07,1.97999e+06,64970.7,4194304,50,0
+TwoLevelTable,mixed_sizes,1.56659e+07,1.55071e+07,1.6727e+07,267023,574495,196352,1000,0
+BalancedTree,mixed_sizes,1.56708e+07,1.55483e+07,1.61019e+07,131731,574318,0,1000,0
+CuckooHashTable,mixed_sizes,1.7269e+07,1.70483e+07,1.76537e+07,154194,521165,2097152,1000,0
+TwoLevelTable,high_churn,555185,553000,572500,4080.72,1.08072e+07,133120,500,0
+BalancedTree,high_churn,652840,646600,686000,11008.3,9.19061e+06,0,500,0
+CuckooHashTable,high_churn,615135,610400,652700,10141,9.75396e+06,65536,500,0
+TwoLevelTable,random_access,1.262e+06,1.2425e+06,1.3834e+06,40274.4,7.13157e+06,136192,1000,0
+BalancedTree,random_access,1.3618e+06,1.3389e+06,1.419e+06,18455.7,6.6089e+06,0,1000,0
+CuckooHashTable,random_access,1.35788e+06,1.3471e+06,1.4157e+06,17623.7,6.62795e+06,131072,1000,0

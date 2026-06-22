@@ -2,7 +2,7 @@
 
 class BasicShadow : public Memory {
 public:
-    BasicShadow(size_t mem_size) : Memory(mem_size) {}
+    BasicShadow(size_t mem_size) : Memory(mem_size), shadow_(new uint8_t[mem_size]) {}
 
     uint64_t alloc(size_t size, uint8_t tag) override {
         uint64_t addr = Memory::alloc(size, tag); // base allocator
@@ -23,7 +23,7 @@ public:
         return shadow_[addr] == expected;
     }
 
-    size_t get_overhead_bytes() const override {
+    size_t get_overhead_bytes() override {
         return size_; // shadow memory is same size as main memory
     }
 
@@ -31,11 +31,16 @@ public:
 
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
+    void print_overhead_bytes() override {
+        std::cout << "Overhead bytes: " << get_overhead_bytes() << "\n";
+    }
 
 private:
     void tag_range(uint64_t addr, size_t size, uint8_t tag) {
         for (size_t i = 0; i < size; ++i) {
             shadow_[addr + i] = tag;
+            stats_.tag_accesses++;
+            stats_.total_accesses++;
         }
     }
 

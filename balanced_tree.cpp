@@ -36,7 +36,7 @@ public:
 		return node && node->tag == expected;
 	}
 
-	size_t get_overhead_bytes() const override {
+	size_t get_overhead_bytes() override {
 		return count_nodes(root_) * sizeof(BTreeNode);
 	}
 
@@ -50,16 +50,20 @@ public:
 private:
     BTreeNode* root_;
 
-    int height(BTreeNode* node) const {
+    int height(BTreeNode* node) {
+        stats_.tag_accesses++;
+        stats_.total_accesses++;
         return node ? node->height : 0;
     }
 
     void update_height(BTreeNode* node) {
+        stats_.tag_accesses++;
+        stats_.total_accesses++;
         if (node)
             node->height = 1 + std::max(height(node->left), height(node->right));
     }
 
-    int balance_factor(BTreeNode* node) const {
+    int balance_factor(BTreeNode* node) {
         return node ? height(node->left) - height(node->right) : 0;
     }
 
@@ -72,6 +76,10 @@ private:
 
         update_height(b); // Update height of b first since it's now a child of a
         update_height(a); 
+
+        stats_.tag_accesses += 2;
+        stats_.total_accesses += 2;
+
         return a;
     }
 
@@ -84,6 +92,10 @@ private:
 
         update_height(a);
         update_height(b);
+
+        stats_.tag_accesses += 2;
+        stats_.total_accesses += 2;
+
         return b;
     }
 
@@ -94,16 +106,22 @@ private:
         // Left heavy
         if (bf > 1) {
             // Left-right case: double rotation needed
-            if (balance_factor(node->left) < 0)
+            if (balance_factor(node->left) < 0) {
                 node->left = rotate_left(node->left);
+                stats_.tag_accesses++;
+                stats_.total_accesses++;
+            }
             return rotate_right(node);
         }
 
         // Right heavy
         if (bf < -1) {
             // Right-left case: double rotation needed
-            if (balance_factor(node->right) > 0)
+            if (balance_factor(node->right) > 0) {  
                 node->right = rotate_right(node->right);
+                stats_.tag_accesses++;
+                stats_.total_accesses++;
+            }
             return rotate_left(node);
         }
 
@@ -114,10 +132,15 @@ private:
         if (!node)
             return new BTreeNode(base_addr, size, tag);
 
-        if (base_addr < node->base_addr)
-            node->left  = insert(node->left,  base_addr, size, tag);
-        else if (base_addr > node->base_addr)
+        if (base_addr < node->base_addr) {
+            node->left = insert(node->left,  base_addr, size, tag);
+            stats_.tag_accesses++;
+            stats_.total_accesses++;
+        } else if (base_addr > node->base_addr) {
             node->right = insert(node->right, base_addr, size, tag);
+            stats_.tag_accesses++;
+            stats_.total_accesses++;
+        }
 
         return rebalance(node);
     }
@@ -128,6 +151,8 @@ private:
             return node->right;
         }
         node->left = detach_min(node->left, min_out);
+        stats_.tag_accesses++;
+        stats_.total_accesses++;
         return rebalance(node);
     }
 
@@ -136,12 +161,18 @@ private:
 
         if (base_addr < node->base_addr) {
             node->left  = remove(node->left,  base_addr);
+            stats_.tag_accesses++;
+            stats_.total_accesses++;
         } else if (base_addr > node->base_addr) {
             node->right = remove(node->right, base_addr);
+            stats_.tag_accesses++;
+            stats_.total_accesses++;
         } else {
 
             // Case 1: leaf node
             if (!node->left && !node->right) {
+                stats_.tag_accesses += 2;
+                stats_.total_accesses += 2;
                 delete node;
                 return nullptr;
             }
@@ -149,11 +180,15 @@ private:
             // Case 2: one child
             if (!node->left) {
                 BTreeNode* right = node->right;
+                stats_.tag_accesses++;
+                stats_.total_accesses++;
                 delete node;
                 return right;
             }
             if (!node->right) {
                 BTreeNode* left = node->left;
+                stats_.tag_accesses++;
+                stats_.total_accesses++;
                 delete node;
                 return left;
             }
@@ -164,29 +199,40 @@ private:
 
             // Copy successor's allocation data into current node
             node->base_addr = successor->base_addr;
-            node->size      = successor->size;
-            node->tag       = successor->tag;
+            node->size = successor->size;
+            node->tag = successor->tag;
+
+            stats_.tag_accesses += 4;
+            stats_.total_accesses += 4;
+
             delete successor;
         }
 
         return rebalance(node);
     }
 
-    BTreeNode* find(BTreeNode* node, uint64_t addr) const {
+    BTreeNode* find(BTreeNode* node, uint64_t addr) {
         if (!node) return nullptr;
 
-        if (addr >= node->base_addr &&
-            addr <  node->base_addr + node->size)
+        stats_.tag_accesses += 2;
+        stats_.total_accesses += 2;
+
+        if (addr >= node->base_addr && addr <  node->base_addr + node->size)
             return node;
 
+        stats_.tag_accesses++;
+        stats_.total_accesses++;
+        
         if (addr < node->base_addr)
             return find(node->left,  addr);
 
         return find(node->right, addr);
     }
 
-    int count_nodes(BTreeNode* node) const {
+    int count_nodes(BTreeNode* node) {
         if (!node) return 0;
+        stats_.tag_accesses += 2;
+        stats_.total_accesses += 2;
         return 1 + count_nodes(node->left) + count_nodes(node->right);
     }
 
@@ -194,6 +240,10 @@ private:
         if (!node) return;
         destroy(node->left);
         destroy(node->right);
+
+        stats_.tag_accesses += 2;
+        stats_.total_accesses += 2;
+
         delete node;
     }
 };

@@ -36,7 +36,7 @@ public:
         return table_[page_index][offset] == expected;
     }
 
-    size_t get_overhead_bytes() const override {
+    size_t get_overhead_bytes() override {
         size_t overhead = num_pages_ * sizeof(uint8_t*);
         for (size_t i = 0; i < num_pages_; ++i)
             if (table_[i]) overhead += 256;
@@ -59,9 +59,10 @@ public:
 
 private:
     void tag_range(uint64_t addr, size_t size, uint8_t tag) {
-        size_t granules = (size + 15) / 16;
+        size_t granules = (size + 15 + sizeof(uint32_t)) / 16;
+        uint64_t granule_start = (addr - sizeof(uint32_t)) & ~static_cast<uint64_t>(15);
         for (size_t i = 0; i < granules; ++i) {
-            uint64_t cur = addr + i * 16;
+            uint64_t cur = granule_start + i * 16;
             uint64_t page_index = cur / 4096;
             uint64_t offset = (cur % 4096) / 16;
             if (page_index >= num_pages_) break;
@@ -69,8 +70,8 @@ private:
                 table_[page_index] = new uint8_t[256]();
             table_[page_index][offset] = tag;
         }
-        //stats_.tag_accesses += granules;
-        //stats_.total_accesses += granules;
+        stats_.tag_accesses += 2 * granules;
+        stats_.total_accesses += 2 * granules;
     }
 
     size_t num_pages_;
