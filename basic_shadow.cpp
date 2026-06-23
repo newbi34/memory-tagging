@@ -1,6 +1,6 @@
 #include "memory.h"
 
-class BasicShadow : public Memory {
+class BasicShadow : public Memory { //5. implement different granule sizes.
 public:
     BasicShadow(size_t mem_size) : Memory(mem_size), shadow_(new uint8_t[mem_size]) {}
 

@@ -70,7 +70,7 @@ public:
         w.access_pattern = AccessType::RANDOM;
         return w;
     }
-
+//4. few allocations, random accesses.
     static std::vector<WorkloadSpec> all() {
         return {
             small_allocs(),
@@ -81,3 +81,13 @@ public:
         };
     }
 };
+
+
+
+/*
+1. introduction
+2. pregled podrocja (arm mte, strukture, ...)
+3. razvoj nase restive
+4. expreimentalno overdnotenje
+5. zakjlucek
+*/

@@ -12,7 +12,7 @@ public:
     uint64_t tag_accesses = 0; // memory accesses that are tag related
     uint64_t alloc_count = 0;
     uint64_t free_count = 0;
-    uint64_t bytes_allocated = 0;
+    uint64_t bytes_allocated = 0; //2. seperate simulated memory and real memory accesses
     uint64_t peak_overhead_bytes = 0;
 };
 
@@ -51,7 +51,7 @@ public:
 protected:
     size_t alloc_size(uint64_t addr) const;
 
-    std::vector<uint8_t> buffer_;
+    std::vector<uint8_t> buffer_; //1. buffer access, mem access
     std::vector<bool> allocated_;
     size_t size_;
     AccessStats stats_;

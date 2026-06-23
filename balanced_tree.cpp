@@ -1,7 +1,7 @@
 #include "memory.h"
 
 struct BTreeNode {
-    uint64_t base_addr; // key - start of allocation
+    uint64_t base_addr; // key - start of allocation 3. pointer size? pointer acesses
     size_t size; // how many bytes this allocation covers
     uint8_t  tag; // the tag for this allocation
     int height; // for AVL balancing
