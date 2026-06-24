@@ -1,9 +1,10 @@
 #include "memory.h"
 
 struct BTreeNode {
-    uint64_t base_addr; // key - start of allocation 3. pointer size? pointer acesses
+    //3. pointer size? pointer acesses (done)
+    uint64_t base_addr; // key - start of allocation 
     size_t size; // how many bytes this allocation covers
-    uint8_t  tag; // the tag for this allocation
+    uint8_t tag; // the tag for this allocation
     int height; // for AVL balancing
     BTreeNode* left;
     BTreeNode* right;
@@ -37,9 +38,13 @@ public:
 
 	bool check_tag(uint64_t addr, uint8_t expected) override {
 		BTreeNode* node = find(root_, addr);
-		stats_.tag_accesses++;
-		stats_.total_accesses++;
-		return node && node->tag == expected;
+
+		stats_.pointer_accesses++;
+
+        if (!node) 
+            return expected == 0; // unallocated addresses are considered untagged
+
+		return node->tag == expected;
 	}
 
 	size_t get_overhead_bytes() override {
@@ -58,18 +63,23 @@ private:
 
     int height(BTreeNode* node) {
         stats_.tag_accesses++;
-        stats_.total_accesses++;
+        stats_.bytes_transferred += sizeof(node->height);
         return node ? node->height : 0;
     }
 
     void update_height(BTreeNode* node) {
         stats_.tag_accesses++;
-        stats_.total_accesses++;
+        stats_.bytes_transferred += sizeof(node->height);
+        stats_.pointer_accesses += 2;
+
         if (node)
             node->height = 1 + std::max(height(node->left), height(node->right));
     }
 
     int balance_factor(BTreeNode* node) {
+        stats_.tag_accesses++;
+        stats_.pointer_accesses += 2;
+
         return node ? height(node->left) - height(node->right) : 0;
     }
 
@@ -83,8 +93,7 @@ private:
         update_height(b); // Update height of b first since it's now a child of a
         update_height(a); 
 
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+        stats_.pointer_accesses += 2;
 
         return a;
     }
@@ -99,8 +108,7 @@ private:
         update_height(a);
         update_height(b);
 
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+        stats_.pointer_accesses += 2;
 
         return b;
     }
@@ -114,8 +122,7 @@ private:
             // Left-right case: double rotation needed
             if (balance_factor(node->left) < 0) {
                 node->left = rotate_left(node->left);
-                stats_.tag_accesses++;
-                stats_.total_accesses++;
+                stats_.pointer_accesses++;
             }
             return rotate_right(node);
         }
@@ -125,8 +132,7 @@ private:
             // Right-left case: double rotation needed
             if (balance_factor(node->right) > 0) {  
                 node->right = rotate_right(node->right);
-                stats_.tag_accesses++;
-                stats_.total_accesses++;
+                stats_.pointer_accesses++;
             }
             return rotate_left(node);
         }
@@ -141,11 +147,13 @@ private:
         if (base_addr < node->base_addr) {
             node->left = insert(node->left,  base_addr, size, tag);
             stats_.tag_accesses++;
-            stats_.total_accesses++;
+            stats_.pointer_accesses++;
+            stats_.bytes_transferred += sizeof(node->base_addr);
         } else if (base_addr > node->base_addr) {
             node->right = insert(node->right, base_addr, size, tag);
             stats_.tag_accesses++;
-            stats_.total_accesses++;
+            stats_.pointer_accesses++;
+            stats_.bytes_transferred += sizeof(node->base_addr);
         }
 
         return rebalance(node);
@@ -154,11 +162,11 @@ private:
     BTreeNode* detach_min(BTreeNode* node, BTreeNode*& min_out) {
         if (!node->left) {
             min_out = node;
+            stats_.pointer_accesses++;
             return node->right;
         }
         node->left = detach_min(node->left, min_out);
-        stats_.tag_accesses++;
-        stats_.total_accesses++;
+        stats_.pointer_accesses++;
         return rebalance(node);
     }
 
@@ -167,18 +175,21 @@ private:
 
         if (base_addr < node->base_addr) {
             node->left  = remove(node->left,  base_addr);
+
             stats_.tag_accesses++;
-            stats_.total_accesses++;
+            stats_.pointer_accesses++;
+            stats_.bytes_transferred += sizeof(node->base_addr);
         } else if (base_addr > node->base_addr) {
             node->right = remove(node->right, base_addr);
+
             stats_.tag_accesses++;
-            stats_.total_accesses++;
+            stats_.pointer_accesses++;
+            stats_.bytes_transferred += sizeof(node->base_addr);
         } else {
 
+            stats_.pointer_accesses += 2;
             // Case 1: leaf node
             if (!node->left && !node->right) {
-                stats_.tag_accesses += 2;
-                stats_.total_accesses += 2;
                 delete node;
                 return nullptr;
             }
@@ -186,15 +197,11 @@ private:
             // Case 2: one child
             if (!node->left) {
                 BTreeNode* right = node->right;
-                stats_.tag_accesses++;
-                stats_.total_accesses++;
                 delete node;
                 return right;
             }
             if (!node->right) {
                 BTreeNode* left = node->left;
-                stats_.tag_accesses++;
-                stats_.total_accesses++;
                 delete node;
                 return left;
             }
@@ -208,8 +215,8 @@ private:
             node->size = successor->size;
             node->tag = successor->tag;
 
-            stats_.tag_accesses += 4;
-            stats_.total_accesses += 4;
+            stats_.tag_accesses += 3;
+            stats_.bytes_transferred += sizeof(node->base_addr + node->size + node->tag);
 
             delete successor;
         }
@@ -221,24 +228,24 @@ private:
         if (!node) return nullptr;
 
         stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+        stats_.bytes_transferred += sizeof(node->base_addr + node->size);
 
-        if (addr >= node->base_addr && addr <  node->base_addr + node->size)
+        if (addr >= node->base_addr && addr < node->base_addr + node->size)
             return node;
 
-        stats_.tag_accesses++;
-        stats_.total_accesses++;
-        
-        if (addr < node->base_addr)
-            return find(node->left,  addr);
 
+        if (addr < node->base_addr) {
+            stats_.pointer_accesses++;
+            return find(node->left, addr);
+        }
+        
+        stats_.pointer_accesses++;
         return find(node->right, addr);
     }
 
+    // No stats_ since this is not part of tag checking
     int count_nodes(BTreeNode* node) {
         if (!node) return 0;
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
         return 1 + count_nodes(node->left) + count_nodes(node->right);
     }
 
@@ -246,9 +253,6 @@ private:
         if (!node) return;
         destroy(node->left);
         destroy(node->right);
-
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
 
         delete node;
     }

@@ -46,11 +46,14 @@ public:
 
     bool check_tag(uint64_t addr, uint8_t expected) override {
         stats_.tag_accesses++;
-        stats_.total_accesses++;
 
         uint64_t granule = (addr - sizeof(uint32_t)) & ~0xFULL; // align to 16B granule
         CuckooEntry* e = lookup(granule);
-        if (!e) return false;
+        if (!e) 
+            return expected == 0; // unallocated granules are considered untagged
+
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(e->tag);
 
         return e->tag == expected;
     }
@@ -75,21 +78,25 @@ private:
     CuckooEntry* tableB_;
     int rehash_count_ = 0;
 
-    size_t h1(uint64_t granule_addr) const {
+    size_t h1(uint64_t granule_addr) {
         uint64_t k = (granule_addr >> 4); // granule index
         k ^= (uint64_t)rehash_count_ * 0xdeadbeefULL;
         return (k * 0x9e3779b97f4a7c15ULL) >> (64 - index_bits());
     }
 
-    size_t h2(uint64_t granule_addr) const {
+    size_t h2(uint64_t granule_addr) {
         uint64_t k = (granule_addr >> 4);
         k ^= (uint64_t)rehash_count_ * 0xcafebabeULL;
         return (k * 0x6c62272e07bb0142ULL) >> (64 - index_bits());
     }
 
-    size_t index_bits() const {
+    size_t index_bits() {
         size_t bits = 0;
         size_t n = table_size_;
+
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(table_size_);
+
         while (n > 1) { n >>= 1; ++bits; }
         return bits;
     }
@@ -103,16 +110,17 @@ private:
     CuckooEntry* lookup(uint64_t granule_addr) {
         size_t sa = h1(granule_addr);
 
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(tableA_[sa]);
 
         if (tableA_[sa].used && tableA_[sa].addr == granule_addr)
             return &tableA_[sa];
-
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
-
+            
         size_t sb = h2(granule_addr);
+
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(tableB_[sb]);
+
         if (tableB_[sb].used && tableB_[sb].addr == granule_addr)
             return &tableB_[sb];
 
@@ -122,6 +130,9 @@ private:
     bool insert(uint64_t granule_addr, uint8_t tag) {
         CuckooEntry* existing = lookup(granule_addr);
         if (existing) {
+            stats_.tag_accesses++;
+            stats_.bytes_transferred += sizeof(existing->tag);
+
             existing->tag = tag;
             return true;
         }
@@ -132,22 +143,22 @@ private:
             size_t sa = h1(displaced.addr);
 
             stats_.tag_accesses++;
-            stats_.total_accesses++;
+            stats_.bytes_transferred += sizeof(tableA_[sa]);
+
             if (!tableA_[sa].used) {
                 stats_.tag_accesses++;
-                stats_.total_accesses++;
                 tableA_[sa] = displaced;
                 return true;
             }
             std::swap(tableA_[sa], displaced);
 
-            stats_.tag_accesses++;
-            stats_.total_accesses++;
-
             size_t sb = h2(displaced.addr);
+
+            stats_.tag_accesses++;
+            stats_.bytes_transferred += sizeof(tableB_[sb]);
+
             if (!tableB_[sb].used) {
                 stats_.tag_accesses++;
-                stats_.total_accesses++;
                 tableB_[sb] = displaced;
                 return true;
             }
@@ -160,21 +171,21 @@ private:
 
     void remove(uint64_t granule_addr) {
         size_t sa = h1(granule_addr);
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(tableA_[sa]);
+
         if (tableA_[sa].used && tableA_[sa].addr == granule_addr) {
-            stats_.tag_accesses++;
-            stats_.total_accesses++;
             tableA_[sa] = CuckooEntry{};
             return;
         }
 
         size_t sb = h2(granule_addr);
-        stats_.tag_accesses += 2;
-        stats_.total_accesses += 2;
+
+        stats_.tag_accesses++;
+        stats_.bytes_transferred += sizeof(tableB_[sb]);
+
         if (tableB_[sb].used && tableB_[sb].addr == granule_addr) {
-            stats_.tag_accesses++;
-            stats_.total_accesses++;
             tableB_[sb] = CuckooEntry{};
         }
     }
@@ -199,6 +210,10 @@ private:
     bool rehash() {
         std::vector<CuckooEntry> live;
         live.reserve(table_size_);
+
+        stats_.tag_accesses += 2 * table_size_;
+        stats_.bytes_transferred += 2 * table_size_ * sizeof(CuckooEntry);
+
         for (size_t i = 0; i < table_size_; ++i) {
             if (tableA_[i].used) live.push_back(tableA_[i]);
             if (tableB_[i].used) live.push_back(tableB_[i]);
@@ -222,8 +237,6 @@ private:
     size_t count_entries() {
         size_t count = 0;
         for (size_t i = 0; i < table_size_; ++i) {
-            stats_.tag_accesses += 2;
-            stats_.total_accesses += 2;
             if (tableA_[i].used) ++count;
             if (tableB_[i].used) ++count;
         }

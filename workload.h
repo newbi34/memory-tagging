@@ -18,6 +18,7 @@ struct WorkloadSpec {
     int    accesses_per_alloc = 8;    // how many check_tag calls per alloc
     AccessType access_pattern = AccessType::SEQUENTIAL;
     bool   include_free_cycle = false; // free half, realloc, used for churn test
+    bool  include_global_random_access = false; // perform random accesses across all allocations, used for global random access test
 };
 
 class Workload {
@@ -70,14 +71,26 @@ public:
         w.access_pattern = AccessType::RANDOM;
         return w;
     }
-//4. few allocations, random accesses.
+
+    //4. few allocations, random accesses. (done)
+    static WorkloadSpec global_random_access(size_t count = 100) {
+        WorkloadSpec w;
+        w.name = "global_random_access";
+        w.alloc_sizes.assign(count, 64);
+        w.accesses_per_alloc = 16;
+        w.access_pattern = AccessType::RANDOM;
+        w.include_global_random_access = true;
+        return w;
+    }
+
     static std::vector<WorkloadSpec> all() {
         return {
             small_allocs(),
             large_allocs(),
             mixed_sizes(),
             high_churn(),
-            random_access()
+            random_access(),
+            global_random_access()
         };
     }
 };

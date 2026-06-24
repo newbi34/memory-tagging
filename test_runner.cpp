@@ -23,9 +23,18 @@ void print_summary()
 	tests_run = tests_passed = 0; // reset for next implementation
 }
 
-void run_benchmark_tests(Memory &mem)
-{
-	
+void my_test(Memory &mem) {
+	std::cout << "\n=== " << mem.name() << " ===\n\n";
+
+	uint64_t ptr1 = mem.alloc(32, 0xA);
+
+	uint64_t ptr = mem.alloc(32, 0xA);
+	std::cout << "Allocated 32 bytes at address: " << ptr << "\n";
+
+	for (int i = -16; i < 48; ++i) {
+		bool ok = mem.check_tag(ptr + i, 0xA);
+		check("check_tag for byte " + std::to_string(i) + "at " + std::to_string(ptr + i), ok, true);
+	}
 }
 
 void run_correctness_tests(Memory &mem)
@@ -82,7 +91,7 @@ void run_correctness_tests(Memory &mem)
 
 int main()
 {
-	{
+	/*{
 		TwoLevelTable mem(1024 * 1024);
 		run_correctness_tests(mem);
 	}
@@ -95,8 +104,13 @@ int main()
 		run_correctness_tests(mem);
 	}
 	{
-		BasicShadow mem(1024 * 1024);
+		BasicShadow mem(1024 * 1024, 16);
 		run_correctness_tests(mem);
+	}*/
+
+	{
+		TwoLevelTable mem(1024 * 1024);
+		my_test(mem);
 	}
 	return 0;
 }

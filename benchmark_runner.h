@@ -13,7 +13,6 @@
 class BenchmarkRunner {
 public:
     static constexpr int NUM_RUNS = 20;
-    static constexpr int WARMUP_RUNS = 1;
 
     // Runs `w` against `mem` and returns timing + memory results.
     // `mem` should be freshly constructed (empty) before calling.
@@ -25,10 +24,9 @@ public:
         std::vector<double> latencies;
         latencies.reserve(NUM_RUNS);
 
-        for (int run = 0; run < WARMUP_RUNS + NUM_RUNS; ++run) {
+        for (int run = 0; run < NUM_RUNS; ++run) {
             double ns = execute_once(mem, w, result);
-            if (run >= WARMUP_RUNS) // discard warmup sample
-                latencies.push_back(ns);
+            latencies.push_back(ns);
         }
 
         double avg, mn, mx, stddev;
@@ -54,9 +52,10 @@ private:
     // Executes the full workload once against mem, returns elapsed ns.
     // mem state is reset (cleared) before and after via fresh alloc/free
     // pairs, so the implementation always starts from a known state.
-    static double execute_once(Memory& mem, const WorkloadSpec& w,
-                               BenchmarkResult& result) {
-        std::vector<uint64_t> live;
+    static double execute_once(Memory& mem, const WorkloadSpec& w, BenchmarkResult& result) {
+        struct LiveAlloc { uint64_t addr; uint8_t tag; };
+        std::vector<LiveAlloc> live;
+
         live.reserve(w.alloc_sizes.size());
 
         std::mt19937 rng(1234); // fixed seed for reproducible access pattern
@@ -73,7 +72,7 @@ private:
                 // allocator ran out of space — stop this run early
                 break;
             }
-            live.push_back(addr);
+            live.push_back({addr, tag});
 
             // perform accesses_per_alloc check_tag calls on this allocation
             for (int a = 0; a < w.accesses_per_alloc; ++a) {
@@ -95,6 +94,27 @@ private:
                 mem.free(addr);
                 live.pop_back();
             }
+
+            // random global access test: check a random address in the entire memory space
+            if (w.include_global_random_access) {
+                size_t mem_size = mem.get_size();
+                std::uniform_int_distribution<uint64_t> global_d(0, mem_size - 1);
+                uint64_t rand_addr = global_d(rng);
+
+                // find which allocation this address belongs to, if any
+                uint8_t expected_tag = 0; // assume untagged
+                for (size_t j = 0; j < live.size(); ++j) {
+                    size_t alloc_sz = mem.alloc_size(live[j].addr);
+                    if (rand_addr >= live[j].addr && rand_addr < live[j].addr + alloc_sz) {
+                        expected_tag = live[j].tag;
+                        break;
+                    }
+                }
+            
+                // now check_tag with the correct expected tag
+                bool ok = mem.check_tag(rand_addr, expected_tag);
+                if (!ok) result.correctness_violations++;
+            }
         }
 
         double elapsed = timer.stop_ns();
@@ -103,7 +123,7 @@ private:
 
         // clean up remaining live allocations so mem can be reused
         // for the next run without growing unbounded
-        for (uint64_t a : live) mem.free(a);
+        for (const auto& la : live) mem.free(la.addr);
 
         return elapsed;
     }

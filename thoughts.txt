@@ -6,3 +6,11 @@
 questions:
 -kako meriti dostope
 -cuckoo bucket?
+
+!!find something with you approaches??
+
+tabele:
+primerjava razlicnih granule sizov pri basic shadow.
+
+kje je poglavje "interpretacija rezlutatov"
+ali "wasted space" v simuliranem pomnilniku stejemo k overhead bytes pri granularnem prisopu (allociramo 8 bytov, rezerviramo 16 da poravnamo z granulo)

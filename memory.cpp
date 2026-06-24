@@ -40,21 +40,23 @@ void Memory::free(uint64_t addr) {
 
 void Memory::write(uint64_t addr, const uint8_t* data, size_t size) {
     if (addr + size > size_) return;
-    stats_.total_accesses++; 
+    stats_.simulated_accesses++; 
     std::memcpy(&buffer_[addr], data, size);
 }
 
 uint8_t* Memory::read(uint64_t addr) {
     if (addr >= size_) return nullptr;
-    stats_.total_accesses++;
+    stats_.simulated_accesses++;
     return &buffer_[addr];
 }
 
 void Memory::print_stats() {
     auto s = get_stats();
     std::cout << "[" << name() << "]\n"
-          << "  total accesses  : " << s.total_accesses  << "(total times gone to memory)" << "\n"
           << "  tag accesses    : " << s.tag_accesses    << "(times gone to memory to write or read tags)" <<"\n"
+          << "  pointer accesses: " << s.pointer_accesses << "(times gone to memory to write or read pointers)" << "\n"
+          << "  bytes transferred: " << s.bytes_transferred << "(total bytes transferred in real memory accesses)" << "\n"
+          << "  simulated accesses: " << s.simulated_accesses << "(simulated memory accesses)" << "\n"
           << "  alloc count     : " << s.alloc_count     << "\n"
           << "  free count      : " << s.free_count      << "\n"
           << "  bytes allocated : " << s.bytes_allocated << "\n"

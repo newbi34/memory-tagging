@@ -5,19 +5,23 @@
 #include <cstring>
 #include <iostream>
 
-class AccessStats
-{
+class AccessStats {
 public:
-    uint64_t total_accesses = 0; // total memory accesses
-    uint64_t tag_accesses = 0; // memory accesses that are tag related
+    uint64_t tag_accesses = 0; // real memory accesses that are tag related
+    uint64_t pointer_accesses = 0; // real memory accesses that are pointer related
+    uint64_t bytes_transferred = 0; // total bytes transferred in real memory accesses
+
     uint64_t alloc_count = 0;
     uint64_t free_count = 0;
-    uint64_t bytes_allocated = 0; //2. seperate simulated memory and real memory accesses
+    uint64_t bytes_allocated = 0; 
+    
+    //2. seperate simulated memory and real memory accesses (done)
+    uint64_t simulated_accesses = 0; // simulated memory accesses
+
     uint64_t peak_overhead_bytes = 0;
 };
 
-class ITaggingImpl
-{
+class ITaggingImpl {
 public:
     virtual ~ITaggingImpl() = default;
     virtual uint64_t alloc(size_t size, uint8_t tag) = 0;
@@ -29,8 +33,7 @@ public:
     virtual void reset_stats() = 0;
 };
 
-class Memory : public ITaggingImpl
-{
+class Memory : public ITaggingImpl {
 public:
     explicit Memory(size_t size);
     uint64_t alloc(size_t size, uint8_t tag) override;
@@ -46,12 +49,13 @@ public:
     size_t get_overhead_bytes() override { return 0; }
     std::string name() const override { return "Memory"; }
     virtual void print_overhead_bytes() = 0;
+    size_t get_size() const { return size_; }
+
+    size_t alloc_size(uint64_t addr) const;
 
     static constexpr uint64_t INVALID = ~0ULL;
 protected:
-    size_t alloc_size(uint64_t addr) const;
-
-    std::vector<uint8_t> buffer_; //1. buffer access, mem access
+    std::vector<uint8_t> buffer_; //1. buffer access, mem access (done)
     std::vector<bool> allocated_;
     size_t size_;
     AccessStats stats_;

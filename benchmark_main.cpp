@@ -2,6 +2,7 @@
 #include "two_level_table.cpp"
 #include "balanced_tree.cpp"
 #include "hash_table.cpp"
+#include "basic_shadow.cpp"
 #include "benchmark.h"
 #include "workload.h"
 #include "benchmark_runner.h"
@@ -21,6 +22,54 @@ int main() {
     for (const auto& w : workloads) {
         std::cout << "=== Workload: " << w.name << " ===\n\n";
 
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 1);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 2);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 4);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 8);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 16);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 32);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 64);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
+        {
+            BasicShadow mem(BENCH_MEM_SIZE, 128);
+            BenchmarkResult r = BenchmarkRunner::run(mem, w);
+            print_result(r);
+            writer.write(r);
+        }
         {
             TwoLevelTable mem(BENCH_MEM_SIZE);
             BenchmarkResult r = BenchmarkRunner::run(mem, w);

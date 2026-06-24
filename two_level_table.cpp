@@ -35,10 +35,17 @@ public:
     bool check_tag(uint64_t addr, uint8_t expected) override {
         uint64_t page_index = addr / 4096;
         uint64_t offset = (addr % 4096) / 16;
-        if (page_index >= num_pages_ || table_[page_index] == nullptr)
+
+        if (table_[page_index] == nullptr)
+            return expected == 0; // unallocated pages are considered untagged
+
+        if (page_index >= num_pages_)
             return false;
+
         stats_.tag_accesses++;
-        stats_.total_accesses++;
+        stats_.pointer_accesses++;
+        stats_.bytes_transferred++;
+
         return table_[page_index][offset] == expected;
     }
 
@@ -75,9 +82,11 @@ private:
             if (!table_[page_index])
                 table_[page_index] = new uint8_t[256]();
             table_[page_index][offset] = tag;
+            
+            stats_.bytes_transferred++;
+            stats_.tag_accesses++;
+            stats_.pointer_accesses++;
         }
-        stats_.tag_accesses += 2 * granules;
-        stats_.total_accesses += 2 * granules;
     }
 
     size_t num_pages_;
