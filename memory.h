@@ -35,7 +35,7 @@ public:
 
 class Memory : public ITaggingImpl {
 public:
-    explicit Memory(size_t size);
+    explicit Memory(size_t size, size_t granule_size = 16);
     uint64_t alloc(size_t size, uint8_t tag) override;
     void free(uint64_t addr) override;
     void write(uint64_t addr, const uint8_t *data, size_t size);
@@ -59,6 +59,7 @@ protected:
     std::vector<bool> allocated_;
     size_t size_;
     AccessStats stats_;
+    size_t granule_size_;
 
 private:
     uint64_t find_free_block(size_t size);

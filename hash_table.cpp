@@ -10,8 +10,8 @@ struct CuckooEntry {
 
 class CuckooHashTable : public Memory {
 public:
-    CuckooHashTable(size_t mem_size, size_t table_size = 1024)
-        : Memory(mem_size),
+    CuckooHashTable(size_t mem_size, size_t table_size = 1024, size_t granule_size = 16)
+        : Memory(mem_size, granule_size),
           table_size_(round_up_pow2(table_size)),
           tableA_(new CuckooEntry[table_size_]()),
           tableB_(new CuckooEntry[table_size_]()) {}
@@ -30,6 +30,8 @@ public:
             return INVALID;
         }
 
+        shadow_ranges_.push_back({addr, size});
+
         // update peak after every insert
         size_t current = get_overhead_bytes();
         if (current > stats_.peak_overhead_bytes)
@@ -47,7 +49,7 @@ public:
     bool check_tag(uint64_t addr, uint8_t expected) override {
         stats_.tag_accesses++;
 
-        uint64_t granule = (addr - sizeof(uint32_t)) & ~0xFULL; // align to 16B granule
+        uint64_t granule = (addr - sizeof(uint32_t)) & ~((uint64_t)granule_size_ - 1); // align to granule
         CuckooEntry* e = lookup(granule);
         if (!e) 
             return expected == 0; // unallocated granules are considered untagged
@@ -59,24 +61,32 @@ public:
     }
 
     size_t get_overhead_bytes() override {
-        return 2 * table_size_ * sizeof(CuckooEntry);
+        size_t overhead = 0;
+
+        for (const auto& range : shadow_ranges_) {
+            overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+        }
+
+        return 2 * table_size_ * sizeof(CuckooEntry) + overhead;
     }
 
     void print_overhead_bytes() {
         std::cout << "Overhead bytes: " << get_overhead_bytes() << "\n";
     }
 
-    std::string name() const override { return "CuckooHashTable"; }
+    std::string name() const override { return "CuckooHashTable(g=" + std::to_string(granule_size_) + ")"; }
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
 
 private:
     static constexpr int MAX_EVICTIONS = 32;
+    int rehash_count_ = 0;
 
     size_t table_size_;
+    std::vector<std::pair<uint64_t, uint64_t>> shadow_ranges_; // for overhead, not used in stats
+
     CuckooEntry* tableA_;
     CuckooEntry* tableB_;
-    int rehash_count_ = 0;
 
     size_t h1(uint64_t granule_addr) {
         uint64_t k = (granule_addr >> 4); // granule index
@@ -191,18 +201,18 @@ private:
     }
 
     bool tag_range(uint64_t addr, size_t size, uint8_t tag) {
-        size_t granules = (size + 15 + sizeof(uint32_t)) / 16;
+        size_t granules = (size + granule_size_ - 1 + sizeof(uint32_t)) / granule_size_;
         for (size_t i = 0; i < granules; ++i) {
-            uint64_t g = (addr + i * 16) & ~0xFULL;
+            uint64_t g = (addr + i * granule_size_) & ~((uint64_t)granule_size_ - 1);
             if (!insert(g, tag)) return false;
         }
         return true;
     }
 
     void clear_range(uint64_t addr, size_t size) {
-        size_t granules = (size + 15) / 16;
+        size_t granules = (size + granule_size_ - 1 + sizeof(uint32_t)) / granule_size_;
         for (size_t i = 0; i < granules; ++i) {
-            uint64_t g = (addr + i * 16) & ~0xFULL;
+            uint64_t g = (addr + i * granule_size_) & ~((uint64_t)granule_size_ - 1);
             remove(g);
         }
     }

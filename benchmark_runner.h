@@ -36,6 +36,7 @@ public:
         result.min_latency_ns    = mn;
         result.max_latency_ns    = mx;
         result.stddev_latency_ns = stddev;
+        result.stats = mem.get_stats();
 
         // throughput based on total ops per run (allocs + accesses + frees)
         size_t ops_per_run = w.alloc_sizes.size() *

@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstring>
 
-Memory::Memory(size_t size) : buffer_(size, 0), size_(size), allocated_(size, false) {}
+Memory::Memory(size_t size, size_t granule_size) : buffer_(size, 0), size_(size), allocated_(size, false), granule_size_(granule_size) {}
 
 uint64_t Memory::alloc(size_t size, uint8_t tag) {
     uint64_t addr = find_free_block(size);
@@ -14,7 +14,7 @@ uint64_t Memory::alloc(size_t size, uint8_t tag) {
     std::memcpy(&buffer_[addr], &size_header, sizeof(size_header));
 
     // total bytes to mark = header + size, rounded up to granule boundary
-    size_t total = (sizeof(uint32_t) + size + 15) & ~size_t(15);
+    size_t total = (sizeof(uint32_t) + size + granule_size_ - 1) & ~size_t(granule_size_ - 1);
     for (size_t i = 0; i < total; ++i)
         allocated_[addr + i] = true;
 
@@ -29,7 +29,7 @@ void Memory::free(uint64_t addr) {
     uint32_t alloc_size = 0;
     std::memcpy(&alloc_size, &buffer_[block], sizeof(alloc_size));
 
-    size_t total = (sizeof(uint32_t) + alloc_size + 15) & ~size_t(15);
+    size_t total = (sizeof(uint32_t) + alloc_size + granule_size_ - 1) & ~size_t(granule_size_ - 1);
     std::memset(&buffer_[block], 0, total);
     for (size_t i = 0; i < total; ++i)
         allocated_[block + i] = false;
@@ -70,14 +70,14 @@ size_t Memory::alloc_size(uint64_t addr) const {
 }
 
 uint64_t Memory::find_free_block(size_t size) {
-    size_t needed = (sizeof(uint32_t) + size + 15) & ~size_t(15); // round up to granule
+    size_t needed = (sizeof(uint32_t) + size + granule_size_ - 1) & ~size_t(granule_size_ - 1); // round up to granule
     size_t run = 0;
     size_t run_start = 0;
 
-    for (size_t i = 0; i < size_; i += 16) {
+    for (size_t i = 0; i < size_; i += granule_size_) {
         if (!allocated_[i]) {
             if (run == 0) run_start = i; // mark where run began
-            run += 16;
+            run += granule_size_;
             if (run >= needed)
                 return run_start; // always return start of run
         } else {

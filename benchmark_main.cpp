@@ -22,72 +22,24 @@ int main() {
     for (const auto& w : workloads) {
         std::cout << "=== Workload: " << w.name << " ===\n\n";
 
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 1);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 2);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 4);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 8);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 16);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 32);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 64);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BasicShadow mem(BENCH_MEM_SIZE, 128);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            TwoLevelTable mem(BENCH_MEM_SIZE);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            BalancedTree mem(BENCH_MEM_SIZE);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
-        {
-            CuckooHashTable mem(BENCH_MEM_SIZE);
-            BenchmarkResult r = BenchmarkRunner::run(mem, w);
-            print_result(r);
-            writer.write(r);
-        }
+        /*{ BasicShadow mem(BENCH_MEM_SIZE, 1); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { BasicShadow mem(BENCH_MEM_SIZE, 2); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { BasicShadow mem(BENCH_MEM_SIZE, 4); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { BasicShadow mem(BENCH_MEM_SIZE, 8); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { BasicShadow mem(BENCH_MEM_SIZE, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+
+        { TwoLevelTable mem(BENCH_MEM_SIZE, 4096, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { TwoLevelTable mem(BENCH_MEM_SIZE, 8192, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+        { TwoLevelTable mem(BENCH_MEM_SIZE, 16384, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }
+
+        { BalancedTree mem(BENCH_MEM_SIZE); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r); }*/
+
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 1024, 8); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 2048, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 4096, 16); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 4096, 32); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 4096, 64); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
+        { CuckooHashTable mem(BENCH_MEM_SIZE, 4096, 128); BenchmarkResult r = BenchmarkRunner::run(mem, w); print_result(r); writer.write(r);}
     }
 
     std::cout << "Results written to benchmark_results.csv\n";

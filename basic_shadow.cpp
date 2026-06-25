@@ -44,9 +44,7 @@ public:
         uint64_t overhead = 0;
 
         for (const auto& range : shadow_ranges_) {
-            if (range.second < granule_size_) {
-                overhead += granule_size_ - range.second;
-            }
+            overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
         }
 
         return shadow_size_ + overhead;

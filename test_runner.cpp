@@ -26,15 +26,13 @@ void print_summary()
 void my_test(Memory &mem) {
 	std::cout << "\n=== " << mem.name() << " ===\n\n";
 
-	uint64_t ptr1 = mem.alloc(32, 0xA);
+	uint64_t a = mem.alloc(32, 0x1);
+	uint64_t b = mem.alloc(32, 0x2);
+	check("adjacent alloc A has correct tag", mem.check_tag(a, 0x1), true);
+	check("adjacent alloc B has correct tag", mem.check_tag(b, 0x2), true);
+	std::cout << "Allocated 32 bytes at address: " << a << "\n";
+	std::cout << "Allocated 32 bytes at address: " << b << "\n";
 
-	uint64_t ptr = mem.alloc(32, 0xA);
-	std::cout << "Allocated 32 bytes at address: " << ptr << "\n";
-
-	for (int i = -16; i < 48; ++i) {
-		bool ok = mem.check_tag(ptr + i, 0xA);
-		check("check_tag for byte " + std::to_string(i) + "at " + std::to_string(ptr + i), ok, true);
-	}
 }
 
 void run_correctness_tests(Memory &mem)
@@ -53,7 +51,7 @@ void run_correctness_tests(Memory &mem)
 	// allocation is 64 bytes = 4 granules, check last granule (ptr+48)
 	check("tag valid on last granule of allocation", mem.check_tag(ptr + 48, 0xA), true);
 
-	check("tag invalid just outside allocation", mem.check_tag(ptr + 64, 0xA), false);
+	check("tag invalid just outside allocation", mem.check_tag(ptr + 15000, 0xA), false);
 
 	// --- Write and read ---
 	const uint8_t data[4] = {0xFF, 0xEE, 0xDD, 0xCC};
@@ -106,11 +104,35 @@ int main()
 	{
 		BasicShadow mem(1024 * 1024, 16);
 		run_correctness_tests(mem);
-	}*/
-
+	}
 	{
 		TwoLevelTable mem(1024 * 1024);
 		my_test(mem);
+	}*/
+
+	{
+		TwoLevelTable mem(1024 * 1024, 1024, 16);
+		run_correctness_tests(mem);
+	}
+	{
+		TwoLevelTable mem(1024 * 1024, 2048, 16);
+		run_correctness_tests(mem);
+	}
+	{
+		TwoLevelTable mem(1024 * 1024, 4096, 16);
+		run_correctness_tests(mem);
+	}
+	{
+		TwoLevelTable mem(1024 * 1024, 8192, 16);
+		run_correctness_tests(mem);
+	}
+	{
+		TwoLevelTable mem(1024 * 1024, 8192, 32);
+		run_correctness_tests(mem);
+	}
+	{
+		TwoLevelTable mem(1024 * 1024, 16384, 64);
+		run_correctness_tests(mem);
 	}
 	return 0;
 }

@@ -3,18 +3,18 @@
 struct BTreeNode {
     //3. pointer size? pointer acesses (done)
     uint64_t base_addr; // key - start of allocation 
-    size_t size; // how many bytes this allocation covers
+    uint32_t size; // how many bytes this allocation covers
     uint8_t tag; // the tag for this allocation
     int height; // for AVL balancing
     BTreeNode* left;
     BTreeNode* right;
 
-	BTreeNode(uint64_t addr, size_t sz, uint8_t t) : base_addr(addr), size(sz), tag(t), height(1), left(nullptr), right(nullptr) {}
+	BTreeNode(uint64_t addr, uint32_t sz, uint8_t t) : base_addr(addr), size(sz), tag(t), height(1), left(nullptr), right(nullptr) {}
 };
 
 class BalancedTree : public Memory {
 public:
-	BalancedTree(size_t mem_size) : Memory(mem_size), root_(nullptr) {}
+	BalancedTree(size_t mem_size) : Memory(mem_size, 8), root_(nullptr) {} // 8 sized dummy granule, we dont use it here
 
 	~BalancedTree() { destroy(root_); }
 
@@ -140,7 +140,7 @@ private:
         return node;
     }
 
-    BTreeNode* insert(BTreeNode* node, uint64_t base_addr, size_t size, uint8_t tag) {
+    BTreeNode* insert(BTreeNode* node, uint64_t base_addr, uint32_t size, uint8_t tag) {
         if (!node)
             return new BTreeNode(base_addr, size, tag);
 

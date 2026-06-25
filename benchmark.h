@@ -24,6 +24,7 @@ struct BenchmarkResult {
     size_t memory_overhead_bytes = 0;
     size_t live_allocations      = 0;
     int    correctness_violations = 0;
+    AccessStats stats;
 };
 
 // ---------------------------------------------------------------
@@ -69,7 +70,9 @@ public:
     explicit ResultWriter(const std::string& path) : out_(path) {
         out_ << "impl,workload,avg_latency_ns,min_latency_ns,max_latency_ns,"
                 "stddev_latency_ns,throughput_ops_sec,memory_overhead_bytes,"
-                "live_allocations,correctness_violations\n";
+                "live_allocations,correctness_violations,tag_accesses,"
+                "pointer_accesses,bytes_transferred,alloc_count,free_count,"
+                "bytes_allocated,simulated_accesses,peak_overhead_bytes\n";
     }
 
     void write(const BenchmarkResult& r) {
@@ -82,7 +85,15 @@ public:
              << r.throughput_ops_sec << ","
              << r.memory_overhead_bytes << ","
              << r.live_allocations << ","
-             << r.correctness_violations << "\n";
+             << r.correctness_violations << ","
+             << r.stats.tag_accesses << ","
+             << r.stats.pointer_accesses << ","
+             << r.stats.bytes_transferred << ","
+             << r.stats.alloc_count << ","
+             << r.stats.free_count << ","
+             << r.stats.bytes_allocated << ","
+             << r.stats.simulated_accesses << ","
+             << r.stats.peak_overhead_bytes << "\n";
     }
 
 private:
@@ -98,5 +109,14 @@ inline void print_result(const BenchmarkResult& r) {
               << "  throughput    : " << r.throughput_ops_sec << " ops/sec\n"
               << "  mem overhead  : " << r.memory_overhead_bytes << " bytes\n"
               << "  live allocs   : " << r.live_allocations << "\n"
-              << "  violations    : " << r.correctness_violations << "\n\n";
+              << "  violations    : " << r.correctness_violations << "\n"
+              << "  stats         : tag_accesses=" << r.stats.tag_accesses
+              << ", pointer_accesses=" << r.stats.pointer_accesses
+              << ", bytes_transferred=" << r.stats.bytes_transferred
+              << ", alloc_count=" << r.stats.alloc_count
+              << ", free_count=" << r.stats.free_count
+              << ", bytes_allocated=" << r.stats.bytes_allocated
+              << ", simulated_accesses=" << r.stats.simulated_accesses
+              << ", peak_overhead_bytes=" << r.stats.peak_overhead_bytes
+              << "\n\n";
 }
