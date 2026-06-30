@@ -1,0 +1,18 @@
+# Fdb version 4
+["pdflatex"] 1782549736.85 "c:/Users/matej/Desktop/programiranje/VSC/sola/memory-tagging/izdelek/test.tex" "test.pdf" "test" 1782549737.46734 0
+  "c:/Users/matej/Desktop/programiranje/VSC/sola/memory-tagging/izdelek/test.tex" 1782549733 78 97140319afbffbd8184dd3ce8fdfaa7c ""
+  "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb" 1782491049 35752 024fb6c41858982481f6968b5fc26508 ""
+  "c:/texlive/2026/texmf-dist/tex/latex/base/article.cls" 1782493472 20144 e6010938fb17dfbae90a243ad7cf351d ""
+  "c:/texlive/2026/texmf-dist/tex/latex/base/size10.clo" 1782493472 8448 f7d8bfe7b7a3986fbf9022b21b7800cc ""
+  "c:/texlive/2026/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def" 1782493440 30909 7dedb28cb21a1e79c47a35a35ae3c507 ""
+  "c:/texlive/2026/texmf-dist/web2c/texmf.cnf" 1782490940 43630 e9fa012910491fe5ae08a72c3c2997a7 ""
+  "c:/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1782496432 5619402 ad1310ccf7f36101ef3e8f014a173c46 ""
+  "c:/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt" 1782496673 3656470 31ca99f4ee00739ef0848640c2072d5a ""
+  "c:/texlive/2026/texmf.cnf" 1782496411 713 e69b156964470283e0530f5060668171 ""
+  "test.aux" 1782549737 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "test.tex" 1782549733 78 97140319afbffbd8184dd3ce8fdfaa7c ""
+  (generated)
+  "test.aux"
+  "test.log"
+  "test.pdf"
+  (rewritten before read)

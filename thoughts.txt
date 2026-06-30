@@ -6,11 +6,65 @@
 !!find something with your approaches??
 
 tabele:
-primerjava razlicnih granule sizov pri basic shadow, two table in hash table.
+primerjava razlicnih granule sizov pri basic shadow, two table in hash table. (overhead, mem accesses, speed)
+primerjava algoritmov pri različnih uporabah (large / small / mixed allocs)
 
 
 kje je poglavje "interpretacija rezlutatov"
 ali "wasted space" v simuliranem pomnilniku stejemo k overhead bytes pri granularnem prisopu (allociramo 8 bytov, rezerviramo 16 da poravnamo z granulo)
+stack tagging?
+ali je linearni allocator problem.
+priblizno koliko posvetiti vsakemu od poglavij
+kako posiljam izdelek, overleaf?
 
 
 granulacija pri vseh pristopih razen tree.
+
+
+1. introduction (povzetek -> uvod, motivacija)
+2. pregled podrocja (arm mte, strukture)
+3. razvoj nase restive (4 poglavja za vsako strukturo)
+4. expreimentalno overdnotenje (sklepne ugotovitve)
+5. zakjlucek (povzetek)
+6. viri
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+1. Uvod
+
+Motivacija — zakaj je memory safety pomembna (CVE statistike, real-world exploiti)
+Cilji dela — implementacija in primerjava štirih pristopov k memory taggingu
+Struktura dela — kratek pregled poglavij
+
+2. Pregled področja
+
+Memory safety — buffer overflow, use-after-free, out-of-bounds
+Problem — overhead obstoječih softverskih rešitev (ASan, Valgrind)
+Obstoječe rešitve — ASan, Valgrind, SoftBound (zakaj so počasne)
+ARM MTE — arhitektura, delovanje, omejitve
+Podatkovne strukture — nasplošno kaj iščemo pri memory tagging (tradeoff med memory overhead and speed, ...)
+Teoretični pregled dvonivojske tabele, AVL drevesa, cuckoo hash tabele, shadow memory
+
+3. Zasnova in implementacija
+
+Skupna arhitektura — Memory razred, ITaggingImpl vmesnik, testni okvir
+Shadow memory
+Dvonivojska tabela
+AVL drevo
+Cuckoo hash tabela
+Za vsako strukturo: motivacija izbire, opis implementacije, časovna in prostorska zahtevnost, posebnosti
+
+4. Eksperimentalno ovrednotenje
+
+Metodologija — testno okolje, workloadi, metrike
+Rezultati po workloadih — latenca, overhead, skalabilnost
+Primerjava z ARM MTE? 
+Kdaj katera struktura prevlada, hardware implementabilnost
+
+5. Zaključek
+
+Povzetek ugotovitev
+Omejitve dela — simulirano okolje, brez stack tagginga, linearen alokator
+Možne razširitve — bucketized cuckoo, shadow memory na realnem kernelu, stack tagging
+
+6. Viri

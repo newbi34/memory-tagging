@@ -1,16 +1,14 @@
 \begin{thebibliography}{10}
 
 \bibitem{andersen2012kinect}
-Michael~Riis Andersen, Thomas Jensen, Pavel Lisouski, Anders~Krogh Mortensen,
-  Mikkel~Kragh Hansen, Torben Gregersen, and Peter Ahrendt.
+Michael~Riis Andersen, Thomas Jensen, Pavel Lisouski, Anders~Krogh Mortensen, Mikkel~Kragh Hansen, Torben Gregersen, and Peter Ahrendt.
 \newblock Kinect depth sensor evaluation for computer vision applications.
 \newblock Technical report, Department of Engineering, Aarhus University, 2012.
 
 \bibitem{diploma}
 Andreja Balon.
 \newblock Vizualizacija.
-\newblock Diplomska naloga, Fakulteta za elektrotehniko in
-  ra\v{c}unalni\v{s}tvo, Univerza v Ljubljani, 1990.
+\newblock Diplomska naloga, Fakulteta za elektrotehniko in ra\v{c}unalni\v{s}tvo, Univerza v Ljubljani, 1990.
 
 \bibitem{knuth}
 Donald knuth.
@@ -20,9 +18,7 @@ Donald knuth.
 \bibitem{knuth1983simple}
 Donald~E Knuth and Peter~B Bendix.
 \newblock Simple word problems in universal algebras.
-\newblock In Jörg~H. Siekmann and Graham Wrightson, editors, {\em Automation
-  of Reasoning: Classical papers on computational logic 1957--1966}, pages
-  342--376. Springer, 1983.
+\newblock In Jörg~H. Siekmann and Graham Wrightson, editors, {\em Automation of Reasoning: Classical papers on computational logic 1957--1966}, pages 342--376. Springer, 1983.
 
 \bibitem{lamport}
 Leslie Lamport.
@@ -32,8 +28,7 @@ Leslie Lamport.
 \bibitem{nenajkrajsi}
 Tobias Oetiker, Hubert Partl, Irene Hyna, and Elisabeth Schlegl.
 \newblock Ne najkraj\v{s}i uvod v {\LaTeX 2$\epsilon$}.
-\newblock Dosegljivo:
-  \url{http://www-lp.fmf.uni-lj.si/plestenjak/vaje/latex/lshort.pdf}, 2006.
+\newblock Dosegljivo: \url{http://www-lp.fmf.uni-lj.si/plestenjak/vaje/latex/lshort.pdf}, 2006.
 \newblock [Dostopano: 1. 10. 2016].
 
 \bibitem{bib}
@@ -50,8 +45,7 @@ Oren Patashnik.
 \bibitem{poglavje_springer}
 Peter Peer and Borut Batagelj.
 \newblock Art---a perfect testbed for computer vision related research.
-\newblock In {\em Recent Advances in Multimedia Signal Processing and
-  Communications}, pages 611--629. Springer, 2009.
+\newblock In {\em Recent Advances in Multimedia Signal Processing and Communications}, pages 611--629. Springer, 2009.
 
 \bibitem{leonardo}
 Franc Solina.

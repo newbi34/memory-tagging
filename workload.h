@@ -94,13 +94,3 @@ public:
         };
     }
 };
-
-
-
-/*
-1. introduction
-2. pregled podrocja (arm mte, strukture, ...)
-3. razvoj nase restive
-4. expreimentalno overdnotenje
-5. zakjlucek
-*/
