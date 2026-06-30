@@ -68,3 +68,8 @@ Omejitve dela — simulirano okolje, brez stack tagginga, linearen alokator
 Možne razširitve — bucketized cuckoo, shadow memory na realnem kernelu, stack tagging
 
 6. Viri
+
+https://www.linaro.org/blog/type-tracking-using-arm-memory-tagging/
+https://www.feustel.us/Feustel%20&%20Associates/Advantages.pdf
+http://feustel.us/Feustel%20&%20Associates/R2.pdf
+https://developer.arm.com/documentation/102925/0100/
