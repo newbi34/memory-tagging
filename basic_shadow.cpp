@@ -79,8 +79,8 @@ private:
     }
 
     // we dont consider looking up grandule/shadow size as memory access since its a constant and can be hardcoded in hardware
-    size_t   granule_size_;
-    size_t   shadow_size_;  // number of granules = mem_size / granule_size
+    size_t granule_size_;
+    size_t shadow_size_;  // number of granules = mem_size / granule_size
     std::vector<std::pair<uint64_t, uint64_t>> shadow_ranges_; // for overhead, not used in stats
 
     uint8_t* shadow_;

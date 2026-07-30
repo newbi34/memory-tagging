@@ -69,9 +69,9 @@ public:
             if (table_[i])
                 overhead += granules_per_page_ * sizeof(uint8_t); // level 2
 
-        for (const auto& range : shadow_ranges_) {
-            overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
-        }
+        //for (const auto& range : shadow_ranges_) {
+        //    overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+        //}
             
         return overhead;
     }

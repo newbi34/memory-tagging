@@ -1,0 +1,472 @@
+1. Uvod
+
+1.1 Motivacija
+Varnost pomnilnika predstavlja enega izmed glavnih problemov današnjega računalništva. Ranljivosti, kot so prekoračitev medpomnilnika (buffer overflow), dostop do že sproščenega pomnilnika
+(use-after-free) in dostop zunaj meja alokacije (out-of-bounds access), se pogosto izkoriščajo v kibernetskih napadih in vdorih. 
+Povzročajo pa tudi mnoge napake v programski opermi, ki jih je v jezikih brez avtomatskega upravljanja z pomnilnikom težko odkriti. 
+Po podatkih Googla je okrog 70 % vseh prijavljenih varnostnih ranljivosti v njihovih izdelkih neposredno povezanih z napakami v upravljanju s pomnilnikom [vir 1].
+
+Kljub dolgoletnim prizadevanjem skupnosti za odpravo teh težav z varnejšimi programskimi jeziki, statično analizo in formalnimi metodami, ostajajo jeziki brez kakršnekoli zagotovljene varnosti 
+pomnilnika zelo pogosto uporabljeni (C, C++, Zig, ..). Razlog je v zmogljivosti in razširjenosti, mnogo obstoječih sistemov je že zgrajenih v teh jezikih. 
+Novejši jeziki z avtomatskim upravljanjem pomnilnika, kot sta Java ali Rust, prinašajo runtime overhead ali pa zahtevajo obsežno prepisovanje 
+obstoječe kode. Zaradi tega še vedno potrebujemo mehanizme za odkrivanje pomnilniških napak.
+
+1.2 Označevanje pomnilnika
+Zgornje napake lahko rešimo z označevanjem pomnilnika. Podatku priredimo oznako, ki nam pove nekaj o originalnem podatku. Oznaka lahko pomeni karkoli, pri tem pristopu pa nam hrani podatke on alokaciji
+podatka. Ko beremo podatek preverimo, ali se oznaka ujema z pričakovano. V primeru neujemanja, smo zaznali pomnilniško napako. 
+
+1.3 Cilji dela
+ARM MTE (ARM Memory Tagging Extension) predstavlja elegantno strojno rešitev, ki pa je omejena na procesorje z ARMv8.5-A arhitekturo. Za sisteme brez te strojne podpore ostaja vprašanje, kako učinkovito implementirati podoben 
+mehanizem v programsko. Različne podatkovne strukture za shranjevanje oznak prinašajo različne kompromise med hitrostjo iskanja, porabo pomnilnika in kompleksnostjo implementacije.
+
+Cilj tega diplomskega dela je implementacija in primerjava štirih pristopov k programskemu označevanju pomnilnika:
+Shadow memory - enostavna podatkovna struktura, ki za vsako granulo pomnilnika hrani 1-bajtno oznako v vzporednem pomnilniškem prostoru
+Dvonivojska tabela - hierarhična struktura po vzoru page table, ki omogoča redko pokritje naslovnega prostora
+AVL drevo - uravnoteženo iskalno drevo, ki hrani po eno vozlišče za vsako alokacijo
+Cuckoo hash tabela - hash tabela z dvema pod-tabelama in zagotovljenim O(1) iskanjem v najslabšem primeru
+
+Vse štiri implementacije so zgrajene na skupni arhitekturi simuliranega pomnilnika in testirane z enotnim testnim okvirjem, kar omogoča neposredno primerjavo. Rezultati so primerjani z že obstoječimi 
+rešitvami na tem področju, kjer je le ta primerna (strojna implementacija ARM MTE naredi časovno primerjavo nesmiselno).
+
+Delo se navezuje na označevanje kopice, saj je to bolj smiselno od označevanja sklada. Implementacija za skald bi bila veliko bolj zahtevna in hkrati manj uporabna, saj je sklad sprva narejen 
+za avtomatske spremenljivke in funkcijske okvirje. Hkrati pa z njem opravlja prevajalnik in programer nima nadzora nad njem.
+
+1.4 Struktura dela
+Delo je organizirano v pet poglavij. Poglavje 2 predstavi področje memory safetyja, obstoječe rešitve in delovanje ARM MTE ter teoretično ozadje podatkovnih struktur, ki so bile implementirane. 
+Poglavje 3 opisuje skupno arhitekturo in podrobnosti vsake od štirih implementacij. Poglavje 4 predstavi metodologijo testiranja, rezultate meritev in primerjavo med implementacijami. 
+Poglavje 5 povzame ugotovitve, ovrednoti omejitve dela in predlaga možne razširitve.
+
+
+
+2. Pregled področja
+
+2.1 Varnost pomnilnika
+
+Varnost pomnilnika (memory safety) opisuje lastnost programa, da so vsi dostopi do pomnilnika veljavni skozi celotno izvajanje programa. Program dostopa le do pomnilnika, ki mu je bil 
+dodeljen in ne presega meja posameznih alokacij ter ne uporablja pomnilnika, ki je bil že sproščen.
+
+V jezikih, kot sta C in C++, za pravilnost upravljanja s pomnilnikom v odgovarja programer. Prevajalnik večine napak ne more odkriti, izvajalno okolje pa ne
+preverja dostopov do pomnilnika. Posledično se lahko program navidezno izvaja pravilno, čeprav v ozadju prepisuje narobne podatke ali odpira možnosti za vdore.
+
+Najpogostejša oblika je prekoračitev medpomnilnika (buffer overflow), pri kateri program zapisuje ali bere podatke preko meja dodeljenega medpomnilnika. Do tega običajno pride zaradi manjkajočega 
+preverjanja velikosti vhodnih podatkov ali napačnega računanja indeksov. Primer takšne napake je prikazan spodaj.
+
+char buf[16];
+gets(buf);   // bere brez omejitve dolžine
+
+Če pride do prekoračitve medpomnilnika na skladu (stack buffer overflow), lahko program prepiše lokalne spremenljivke ali celo povratni naslov funkcije, kar napadalcu omogoča preusmeritev 
+izvajanja programa. Pri prekoračitvah na kopici (heap buffer overflow) pa so pogosto poškodovani metapodatki upravljalnika pomnilnika ali sosednji objekti, kar lahko prav tako vodi do prevzema 
+nadzora nad programom.
+
+Druga pogosta napaka je dostop do že sproščenega pomnilnika (use-after-free). Do nje pride, kadar program po sprostitvi pomnilniške regije še vedno hrani kazalec nanjo in ga pozneje 
+ponovno uporabi.
+
+int *p = malloc(sizeof(int));
+free(p);
+*p = 42;
+
+Ker se sproščeno območje pogosto hitro ponovno dodeli drugemu objektu, tak dostop običajno ne povzroči takojšnjega sesutja programa. Namesto tega lahko spremenija podatke 
+drugega objekta in napadalcu omogoči vplivanje na njegovo vsebino.
+
+zadnja pogosta napake je dostop zunaj meja veljavne alokacije (out-of-bounds access), ki se  zgodi ob dostopu do pomnilniškega naslova zunaj pripadajočega objekta. Poleg prekoračitve zgornje 
+meje vključuje tudi dostop pred začetkom alokacije (buffer underflow).
+
+int arr[8];
+int x = arr[-1];
+int y = arr[8];
+
+Tako branje kot pisanje zunaj meja lahko razkrije vsebino sosednjih pomnilniških območij in s tem občutljive informacije. Eden najbolj znanih primerov je ranljivost Heartbleed, 
+pri kateri je napaka pri preverjanju meja v knjižnici OpenSSL omogočila branje pomnilnika strežnika, kjer so bili nevarni podatki (zasebnimi kriptografskimi ključi) [vir 2].
+
+Vse te napake izvirajo iz istega problema. Sam program nima informacijo o tem, katera pomnilniška območja so veljavna in kakšne so njihove meje. Sodobni mehanizmi zaradi tega temeljijo 
+na programskem dodajanju preverjanja veljavnosti dostopov. To se lahko zgodi med izvajanjem programa, ali pa ob njegovi prevedbi, oba načina pa imata prednosti in slabosti.
+
+2.2 Obstoječe programske rešitve
+
+Zaradi programske implementacije vse te reštive prinašajo znaten overhead.
+
+AddressSanitizer (ASan) je danes najpogosteje uporabljeno orodje za odkrivanje pomnilniških napak. Deluje na ravni prevajalnika. LLVM ali GCC ob prevajanju v vsak 
+pomnilniški dostop vstavi dodatno kodo, ki pred vsakim branjem ali pisanjem preveri veljavnost naslova.
+ASan vzdržuje vzporedno pomnilniško področje (shadow memory), v katerem je za vsak bajt glavnega pomnilnika shranjena informacija o njegovi veljavnosti. Ob alokaciji označi ustrezne bajte 
+shadow memoryja kot veljavne, ob sprostitvi pa kot neveljavne. Granularnost je 8-bajtna, vsak bajt vzporednega pomnilnika opisuje 8 bajtov procesnega pomnilnika. 
+Število naslovljivih bajtov v granuli je nastavljivo z njegovo vrednostjo.
+Poleg tega postavi rdeče cone (redzones), kratka nedostopna območja pred in za vsako alokacijo, ki zaznajo prekoračitev mej alokacije.
+Kljub široki uporabnosti ima ASan pomembne omejitve. Označevanje vsakega pomnilniškega dostopa prinese v povprečju 1,5x do 2x upočasnitev izvajanja in 2x do 3x povečano porabo pomnilnika [vir 3]. 
+
+Druga izbira je Valgrind, ki za validacijo ne vstavlja dodane kode, temveč dinamično interpretira vsak strojni ukaz in ob tem preverja veljavnost. Orodje je sestavljeno iz mnogo paketov, ključni pa je
+Memcheck, ki vzdržuje podrobne metapodatke o stanju vsakega bita pomnilnika.
+Prednost tega pristopa je, da ne zahteva ponovnega prevajanja in zazna zelo majhne oz. skrite napake, vključno z uporabo neinicializiranih vrednosti. Zaradi tega pa je
+izvajanje za 10x do 50x [vir 4]. Razlog je v dinamični interpretaciji. Vsak izvorni ukaz razgradi v vmesno kodo, kjer se mu doda validacijo, če je ta potrebna. Visoko nivojski primer:
+
+Program:
+mov eax,[ptr]
+
+IR:
+t0 = Load(ptr)
+
+Memcheck doda:
+check_address(ptr)
+check_defined(ptr)
+...
+
+Kaj se izvede:
+call check_address
+call check_defined
+...
+mov eax,[ptr]
+
+Orodje v redkih primerih ne zazna use-after-free napake, če se nov podatek alocira na isto mesto, kjer je bil prejšen.
+
+SoftBound deluje na ravni prevajalnika in za vsak kazalec vzdržuje metapodatke o mejah veljavnega dosega: bazo (base) in mejo (bound). Ob vsakem dereferencianju kazalca se preveri, 
+ali naslov pade znotraj veljavnega intervala. V kombinaciji z CETS (Compiler-Enforced Temporal Safety), ki vsaki alokaciji priredi oznako, pokriva SoftBound + CETS tako 
+prostorske (out-of-bounds) kot časovne (use-after-free) pomnilniške napake.
+Prinišav povprečnju 116 % upočasnitev izvajanja [vir 5 + 6] in znatno povečana poraba pomnilnika za metapodatke. Dodatna slabost jezdružljivost z obstoječo kodo.
+Knjižnice, ki niso prevedene skupaj s SoftBound, ne nosijo metapodatkov o mejah, kar zahteva posebno obravnavo na mejah med instrumentirano in neinstrumentirano kodo.
+
+Vsa navedena orodja so lahko uporabljena na kakršnemkoli sistemu, saj so programsko implementirana. Vsak pomnilniški dostop zahteva dodatno preverjanje, ki se izvede zaporedno za dostopom. 
+V primerjavi z strojno implementacijo se vidi veliko razliko v časovni in prostorki porabi.
+
+Tabela za primerjavo:
+Orodje               Upočasnitev   Pomnilniški overhead            Granularnost Produkcijska uporaba
+ASan                 1,5x – 2x     2x – 3x                         8 bajtov     Ne
+Valgrind             10x – 50x     visok                           1 bit        Ne
+SoftBound+CETS       ~1,67x        zmeren (do 100x amapk redko)    kazalec      Ne
+ARM MTE              <1 %           ~3 %                           16 bajtov    Da
+
+Primerjan je tudi ARM MTE, ki pa dosega bistveno manjši overhead, ker ni implementiran programsko, temveč neposredno v strojni opremi.
+
+2.3 ARM MTE
+
+MTE temelji na konceptu lock and key. Vsak kazalec in pomnilniška granula nosita oznako. Ob vsakem dostopu strojno vezje primerja obe oznaki. 
+Ujemanje pomeni veljaven dostop, neskladje pa sproži izjemo. Oznaka je 4-bitna, kar pomeni 16 možnih vrednosti. Ta velikost je bila izbrana kot kompromis med verjetnostjo 
+naključnega ujemanja (1/16 ≈ 6 %) in prostorskim overheadom. vsak bajt shadow memoryja pokrije dve granuli (1/32 ≈ 3 %). Hkrati pa eleganto paše v polovico bajta, kar zagotovi, da so zaporedne oznake
+vedno popolnoma v enem bajto. če to ne bi bilo res, bi to povečalo kompleksnost implementacije in čas preverjanja.
+
+Oznaka kazalca izkorišča Top Byte Ignore. Pri 64-bitnem naslavljanju zgornji bajt naslova ni potreben za naslavljanje, zato ga ARM pri izračunu naslovov ignorira. 
+MTE v prve 4 bite tega bajta shrani oznako kazalca, ne da bi spremenil vrednost naslova:
+[ 4 biti oznaka | 4 biti neuporabljeni | 56 bitov dejanski naslov ]
+Oznake granul so shranjene v ločenem, strojno upravljanem shadow memoryju.
+
+Ob vsaki alokaciji pomnilnika se poleg dodeljevanja pomnilniške regije generira tudi naključna oznaka z IRG (Insert Random Tag) strojnim ukazom. To oznako se zatem vpiše v shadow memory z 
+STG (Store Tag). Vrne se kazalec na to regijo z isto oznako v zgornjem bajtu.
+
+IRG x0, x1        // generiraj naključno oznako, shrani v x0
+STG x0, [x1]      // zapiši oznako za granulo na naslovu x1
+
+MTE doda še kopico dodatnih strojnih ukazov, mnogi za učinkovito pisanje in branje večjega stevila oznak, ki niso potrebni za poznavanje samega delovanja.
+
+Ob vsakem dostopu do pomnilnika strojno vezje samodejno prebere oznako iz kazalca, hkrati pa tudi oznako granule iz shadow memoryja. Oznake se preverita vzopredno z dostopom do pomnilnika.
+Vzporednost je ključna razlika prejšnjih od rešitev, saj je časovni overhead skoraj neopazen.
+
+MTE podpira dva načina zaznavanja neskladij oznak. Sinhron način (synchronous mode), kjer se izjema sproži takoj ob neskladju, preden se dostop zaključi. Program dobi natančno lokacijo napake, kar 
+olajša razhroščevanje. Overhead je nekoliko večji zaradi čakanja na rezultat primerjave. Pri asinhronem način (asynchronous mode) pa je napaka zabeležena le zabeležena, izjema pa sprožena kasneje. 
+Overhead je minimalen, natančna lokacija napake pa je izgubljena. To je bolj primereno za produkcijsko okolje, kjer je cilj zaznati napako, ne pa določiti njeno točno mesto.
+
+Kljub nizkem overheadu obstaja nekaj pomanjkljivosti. Granularnost je fiksna na 16 bajtov. Napake znotraj iste granule (dostop do enega bajta za koncem alokacije, ki leži v isti granuli) niso zaznane.
+ASan z rdečimi conami zazna take napake. Verjetnost lažnega ujemanja je 1/16 ≈ 6 %. Ker ima oznaka samo 4 bite, obstaja netrivialna verjetnost, da se dve oznaki naključno 
+ujemata tudi pri neveljavnem dostopu. V praksi alokatorji skrbijo, da sosednje alokacije prejmejo različne oznake, kar to verjetnost močno zmanjša.
+Za uporabo je potrebna ARMv8.5-A ali novejša arhitektura, na starejših sistemih MTE ni na voljo.
+
+2.4 Podatkovne strukture za programsko označevanje pomnilnika
+
+Glavni lastnosti struktur, ki jih želimo imeti sta hitrost iskanja in majhna poraba pomnilnika. Pridobitev in preverjanje oznak mora biti hitro, če se izvaja ob vsakem pomnilniškem dostopu. Idealno 
+je to reda O(1), O(log n) (n je število alokacij oz. označenih granul) pa je tudi še sprejemljivo. Prostorsko je težko doseči boljše od O(n) (n je število bajtov ki so označeni), strukture ki pa 
+to omogočijo, imajo zaradi tega počasnejše iskanje/pridobivanje ozanke. Običajno bo označen le majhen del celotnega 64-bitnega naslovnega prostora, zato je pomembno, da struktura dinamično alocira
+prostor za oznake. To je odvisno tudi od uporabe, ali označujemo virtualni pomnilnik ali fizičnega. Fizičen pomnilnik je veliko manjši in ta omejitev ni nujna (tako deluje ARM MTE).
+Alokacije so definirane z baznim naslovom in dolžino. Za vmesne naslove potrebujemo tudi logiko poizvedbe po obsegu (ranged queries).
+
+Idealna struktura ne obstaja, dobri rezultati pri eni lastnosti bodo negativno vpivali na druge. Dobra prostorska zahtevnost strukture se bo negativno odražala v slabši časovni zahtevnosti in obratno.
+Izbira velikosti granule je zelo pomembna, visoka granularnost zmanjša porabljen prostor zaradi potrebe po hranjenu manj oznak, hkrati pa ga tudi poveča pri majhnih alokacijah, ki so manjše od velikosti
+granule.
+
+štiri izbrane strukture pokrivajo različne lastnosti in so šibke pri drugih.
+
+2.4.1 Shadow memory
+
+Za vsak naslov v glavnem pomnilniku hranimo metapodatek v vzporednem pomnilniškem področju. Preslikava med naslovom v glavnem pomnilniku in ustreznim mestom v 
+shadow memoryu je enostavna linearna funkcija:
+
+shadow_naslov = shadow_baza + (naslov / granula)
+
+Pri granuli velikosti g bajtov in 1 bajtu na oznako je overhead 1/g %. Za granulo 16 bajtov to pomeni 6,25 % overhead, za granulo 1 bajt pa 100 %.
+
+Časovna zahtevnost iskanja je vedno O(1). Preslikava naslova v shadow memory zahteva eno deljenje in en seštevek, kar se izvede v konstantnem času.
+
+Prostorska zahtevnost je O(N/g), kjer je N velikost pokritega naslovnega prostora in g velikost granule. Overhead je neodvisen od števila alokacij. 
+
+Prednosti strukture so lahka implementacija (tudi strojna) in hitra poizvedba oznake. Slabost pa je velika prostorska poraba. Programska implementacija omogoča nastavljivo granule glede na alokacije. 
+Za velike alokacije, lahko vzamemo večjo granulo in s tem pridobimo na prostoru.
+
+2.4.2 Dvonivojska tabela
+
+Namesto ene velikee tabele za celoten pomnilnik, se tu razdeli naslovni prostor na strani (pages) fiksne velikosti. 
+Prvo nivojska tabela hrani kazalce na drugo nivojske, enega za vsako stran. Drugo nivojske tabele hranijo oznake za posamezne granule znotraj te strani.
+
+naslov → [page_index | granule_offset]
+             ↓
+         tabela_L1[page_index] → tabela_L2
+                                      ↓
+                                 tabela_L2[granule_offset] = oznaka
+
+Drugo nivojske tabele se alocirajo leno, šele ob označevanju prve granule znotraj posamezne strani. Strani brez označenega pomnilnika nimajo alocirane tabele druge ravni, kazalec v prvi ravni pa kaže 
+na nullptr. To je ključna razlika od shadow memoryja. Pri redkih alokacijah struktura porabi bistveno manj prostora kot shadow memory, pri gostih pa se mu približa.
+
+Časovna zahtevnost iskanja je O(1). Vedno potrebujemo natanko dva pomnilniška dostopa, prvič za kazalec v prvi tabeli, drugič za oznako v drugi tabeli.
+
+Prostorska zahtevnost je O(P · G), kjer je P število strani z vsaj eno označeno granulo in G število granul na stran.
+
+Velikost strani in granule sta pomembna parametra strukture. Izbira granularnosti je ima iste posledice kot pri shadow memoryju, izbira velikosti strani pa je podobna. Večja stran zmanjša prostorsko 
+porabo prvo nivojske tabele, hkrati pa poveča porabo drugo nivojski tabel.
+
+2.4.3 AVL Drevo
+AVL drevo je uravnoteženo binarno iskalno drevo. Vozlišče v drevesu predstavlja eno alokacijo, urejeno pa je po njenem naslovu.
+
+vozlišče = { base_addr, size, tag, height, *left, *right }
+
+Iskanje po naslovu ni iskanje po točnem ključu, temveč poizvedba po obsegu — iščemo vozlišče, katerega interval [base_addr, base_addr + size) vsebuje dani naslov:
+
+find(node, addr):
+    if addr ∈ [node.base, node.base + node.size) → return node
+    if addr < node.base → find(node.left, addr)
+    else               → find(node.right, addr)
+
+Uravnoteženost zagotavlja invarianta AVL drevesa. Za vsako vozlišče se višini levega in desnega poddrevesa razlikujeta za največ 1. Ob vsaki vstavljanju ali brisanju se ta invarianta obnovi z 
+rotacijami. Ta je lahko enostavna (enkratna rotacija) ali sestavljena (dvojna rotacija):
+
+        [C]          [B]
+       /       →    /   \
+     [B]          [A]   [C]       // desna rotacija
+     /
+   [A]
+
+Višina uravnoteženega drevesa z n vozlišči je O(log n), kar zagotavlja O(log n) čas iskanja v najslabšem primeru.
+
+Prostorska zahtevnost je O(n), kjer je n število živih alokacij — eno vozlišče na alokacijo ne glede na njeno velikost. To je ključna prednost pri delovnih obremenitvah z majhnim številom 
+velikih alokacij, kjer shadow memory in dvonivojska tabela porabita veliko prostora za pokritje vsake granule posebaj.
+
+Slabost AVL drevesa je v časovni zahtevnosti, ki ni konstantna kot pri prejšnjih strukturah. Poleg tega vsak korak drevesnega prehoda zahteva dostop do naključnega pomnilniškega naslova 
+(pointer chasing). Pri uporabi predpomnilnikov to še dodatno upočasni iskanje.
+
+2.4.4 Cuckoo Hash Tabela
+
+Cuckoo hash tabela je vrsta hash tabele, ki za razliko od klasičnih pristopov (chaining, linear probing) zagotavlja O(1) iskanje v najslabšem primeru. 
+
+Struktura vzdržuje dve pod-tabeli in dve neodvisni hash funkciji:
+
+h1(addr) → pozicija v tabeli A
+h2(addr) → pozicija v tabeli B
+
+Vsak ključ (naslov alokacije) ima natanko dve možni lokaciji, eno v vsaki tabeli. Iskanje vedno preveri natanko ti dve mesti:
+
+lookup(addr):
+    if tableA[h1(addr)].addr == addr → return tableA[h1(addr)]
+    if tableB[h2(addr)].addr == addr → return tableB[h2(addr)]
+    return nullptr
+
+Vstavljanje deluje z verigo izseljevanja (eviction chain). Novo alokacijo poskusi shraniti na pozicijo v tabeli A. Če je zasedena, izseli obstoječo alokacijo (vzame njeno mesto),
+izseljeno pa poskusi namesti v njeno alternativno pozicijo v tabeli B. Taka veriga izselitev se ponavlja, dokler se ne najde prosto mesto ali preseže 
+dovoljeno dolžino verige. Ob predolgih verigah se izvede rehash — izbere se novi par hash funkcij in vsi ključi se znova vstavijo.
+
+Časovna zahtevnost iskanja je O(1), vedno dva pomnilniška dostopa. Vstavljanje je O(1) amortizirano, a ima redke primere dolgih izselitvenih verig ali rehashinga, 
+ki prinesejo kratke latentnostne konice [vir 7]. 
+
+Faktor zasedenosti (load factor) mora ostati pod ~50 % v vsaki pod-tabeli za stabilno delovanje. Nad to mejo izselitvene verige postanejo predolge in rehashing pogost. To pomeni, da cuckoo hash 
+tabela v povprečju zasede le polovico rezerviranega prostora, kar je njena glavna prostorska pomanjkljivost v primerjavi z dvonivojsko tabelo.
+
+Neodvisnost hash funkcij je kritična zahteva. Korelacija med h1 in h2 povzroči gručenje ključev in pogost rehashing. Za naslove, ki so kazalci na pomnilnik.
+
+2.4.5 Primerjava
+Shadow memory Dvonivojska tabela AVL drevo Cuckoo hash
+Iskanje — najslabši primerO(1) O(1) O(log n) O(1)
+Prostorska zahtevnost O(N/g) O(P·G) O(n) O(n/load)
+Cache prijaznost da da ne da
+Redki workloadi ne da da da
+Gosti workloadi da da ne zmerno
+Poizvedbe po obsegu da da da da
+Strojno implementabilno da da ne zmerno
+
+N = velikost naslovnega prostora, g = velikost granule, P = število zasedenih strani, G = granul na stran, n = število alokacij
+
+
+3. Zasnova in implementacija
+
+\section{Zasnova in implementacija}
+
+To poglavje opisuje programsko arhitekturo simulacijskega okolja in implementacijske podrobnosti štirih podatkovnih struktur za ozna\v cevanje pomnilnika. Vse implementacije delujejo nad istim osnovnim modelom pomnilnika in uporabljajo enoten testni ter benchmarkni okvir, kar omogo\v ca neposredno primerjavo.
+
+\subsection{Skupna arhitektura: \texttt{Memory}, \texttt{ITaggingImpl} in testni okvir}
+
+Arhitektura je zasnovana v dveh slojih:
+\begin{itemize}
+    \item \textbf{Abstraktni vmesnik za tagging} definira operacije za delo z oznakami.
+    \item \textbf{Skupna simulacija pomnilnika} skrbi za alokacijo, spro\v s\v canje in simulirane dostope.
+\end{itemize}
+
+Vmesnik \texttt{ITaggingImpl} definira enotno API-povr\v sino za vse implementacije:
+\begin{verbatim}
+alloc(size, tag), free(addr), check_tag(addr, expected),
+get_overhead_bytes(), get_stats(), reset_stats(), name().
+\end{verbatim}
+
+Razred \texttt{Memory} predstavlja skupni temelj vseh implementacij. Hrani glavni medpomnilnik (\texttt{buffer\_}), bitmapo zasedenosti (\texttt{allocated\_}) in metapodatke alokacije (4-bajtna velikost pred vrnjenim naslovom). Alokator je linearen po granulah in za vsako alokacijo rezervira:
+\[
+	exttt{total} = \left\lceil\frac{4 + \texttt{size}}{G}\right\rceil \cdot G,
+\]
+kjer je $G$ granula osnovnega pomnilnika.
+
+Vse implementacije uporabljajo isto statistiko \texttt{AccessStats}, ki meri:
+\begin{itemize}
+    \item \texttt{tag\_accesses} (dostopi, povezani z branjem/pisanjem oznak),
+    \item \texttt{pointer\_accesses} (dostopi preko kazalcev),
+    \item \texttt{bytes\_transferred} (preneseni bajti pri teh dostopih),
+    \item \texttt{simulated\_accesses} (branja/pisanja v simulirani glavni pomnilnik),
+    \item \texttt{peak\_overhead\_bytes} (maksimalen overhead med izvajanjem).
+\end{itemize}
+
+\paragraph{Testni in benchmarkni okvir.}
+Pravilnost preverja \texttt{test\_runner} z enotnimi scenariji (ujemanje/neujemanje oznak, robni naslovi, \emph{use-after-free}, sosednje alokacije, ponovna alokacija). Zmogljivost meri \texttt{BenchmarkRunner} na enakih workloadih (majhne/velike/me\v sane alokacije, \emph{high churn}, naklju\v cni dostopi), z 20 ponovitvami na workload. Rezultat vsebuje latence, prepustnost, \v stevilo kr\v sitev pravilnosti in pomnilni\v ski overhead.
+
+\subsection{Shadow memory}
+
+\paragraph{Motivacija izbire.}
+Sen\v cni pomnilnik je najpreprostej\v si in najbli\v zji strojni ideji ARM MTE: naslov se z linearno preslikavo prevede v mesto oznake. Implementacija je zato primerna kot referen\v cna osnova za primerjavo.
+
+\paragraph{Opis implementacije.}
+Razred \texttt{BasicShadow} hrani polje \texttt{shadow\_}, kjer en bajt predstavlja eno granulo:
+\[
+	exttt{shadow\_index} = \left\lfloor\frac{\texttt{addr}}{G}\right\rfloor.
+\]
+Pri \texttt{alloc()} implementacija ozna\v ci vse granule, ki jih alokacija prekriva (vklju\v cno delno prekritimi na robu). Pri \texttt{free()} isti interval prepi\v se z oznako 0. Operacija \texttt{check\_tag()} prebere en bajt iz \texttt{shadow\_} in ga primerja s pri\v cakovano vrednostjo.
+
+Overhead je sestavljen iz:
+\begin{itemize}
+    \item velikosti celotnega sen\v cnega polja ($\texttt{mem\_size}/G$),
+    \item notranje izgube zaradi poravnave alokacij na granulo (padding zadnje granule).
+\end{itemize}
+
+\paragraph{\v Casovna in prostorska zahtevnost.}
+\begin{itemize}
+    \item \texttt{check\_tag}: $O(1)$
+    \item \texttt{alloc}/\texttt{free} (tag del): $O(k)$, kjer je $k$ \v stevilo pokritih granul
+    \item prostor: $O(N/G)$, neodvisno od dejanskega \v stevila alokacij
+\end{itemize}
+
+\paragraph{Posebnosti.}
+Prednost je zelo predvidljivo vedenje in odli\v cna cache lokalnost. Slabost je fiksni stro\v sek pokritja celotnega naslovnega prostora, tudi pri redkih workloadih.
+
+\subsection{Dvonivojska tabela}
+
+\paragraph{Motivacija izbire.}
+Cilj dvonivojske tabele je zadr\v zati konstanten \v cas iskanja kot pri sen\v cnem pomnilniku, vendar z bistveno manj\v so porabo pri redko ozna\v cenem naslovnem prostoru.
+
+\paragraph{Opis implementacije.}
+Razred \texttt{TwoLevelTable} razdeli naslov na:
+\[
+	exttt{addr} \rightarrow (\texttt{page\_index},\ \texttt{granule\_offset}).
+\]
+Prva raven je tabela kazalcev na drugo raven. Druga raven je polje bajtnih oznak za granule v strani. Tabele druge ravni se alocirajo leno, \v sele ob prvem zapisu oznake v posamezno stran.
+
+Pri \texttt{check\_tag()}:
+\begin{itemize}
+    \item \v ce kazalec prve ravni ne obstaja, je stran neozna\v cena (pri\v cakovana oznaka je 0),
+    \item sicer se prebere oznaka iz druge ravni in primerja z \texttt{expected}.
+\end{itemize}
+
+Overhead vsebuje:
+\begin{itemize}
+    \item vedno prisotno prvo raven ($\#\texttt{pages} \cdot \texttt{sizeof(ptr)}$),
+    \item samo dejansko alocirane strani druge ravni,
+    \item padding zaradi granularne poravnave.
+\end{itemize}
+
+\paragraph{\v Casovna in prostorska zahtevnost.}
+\begin{itemize}
+    \item \texttt{check\_tag}: $O(1)$ (dva indeksa, do dva dereferen\v cna dostopa)
+    \item \texttt{alloc}/\texttt{free} (tag del): $O(k)$
+    \item prostor: $O(P \cdot G_p) + O(P_1)$
+\end{itemize}
+kjer je $P$ \v stevilo ozna\v cenih strani, $G_p$ granul na stran in $P_1$ \v stevilo vnosov prve ravni.
+
+\paragraph{Posebnosti.}
+V primerjavi s sen\v cnim pomnilnikom je struktura bistveno bolj ugodna pri redkih alokacijah. Cena za to je dodatna indirekcija prek prve ravni in odvisnost od izbire velikosti strani.
+
+\subsection{AVL drevo}
+
+\paragraph{Motivacija izbire.}
+AVL drevo je izbrano kot predstavnik struktur, ki ne hranijo oznak po granulah, temve\v c po alokacijah. To je ugodno pri malo\v stevilnih, velikih alokacijah.
+
+\paragraph{Opis implementacije.}
+Razred \texttt{BalancedTree} hrani vozli\v s\v ca oblike:
+\[
+\{\texttt{base\_addr},\ \texttt{size},\ \texttt{tag},\ \texttt{height},\ \texttt{left},\ \texttt{right}\}.
+\]
+Klju\v c je bazni naslov alokacije. Operacija \texttt{check\_tag(addr, expected)} izvede \emph{range query}: i\v s\v ce vozli\v s\v ce, za katerega velja
+\[
+	exttt{base\_addr} \le \texttt{addr} < \texttt{base\_addr} + \texttt{size}.
+\]
+Vstavljanje in brisanje uporabljata standardne AVL rotacije (LL/LR/RR/RL), zato je vi\v sina drevesa omejena z $O(\log n)$.
+
+Overhead je pribli\v zno linearen v \v stevilu aktivnih alokacij:
+\[
+	exttt{overhead} \approx n \cdot \texttt{sizeof(BTreeNode)}.
+\]
+
+\paragraph{\v Casovna in prostorska zahtevnost.}
+\begin{itemize}
+    \item \texttt{check\_tag}: $O(\log n)$
+    \item \texttt{alloc}/\texttt{free}: $O(\log n)$
+    \item prostor: $O(n)$
+\end{itemize}
+
+\paragraph{Posebnosti.}
+Prednost je nizka poraba pri redkih, velikih alokacijah. Slabost je \emph{pointer chasing}: veliko dereferenc in slab\v sa cache lokalnost, zato je prakti\v cna latenca pogosto vi\v sja od tabelari\v cnih pristopov.
+
+\subsection{Cuckoo hash tabela}
+
+\paragraph{Motivacija izbire.}
+Cuckoo hash cilja na konstantno in predvidljivo iskanje oznake (najve\v c dve lokaciji), hkrati pa naj bo struktura bolj redka kot linearni sen\v cni pomnilnik.
+
+\paragraph{Opis implementacije.}
+Razred \texttt{CuckooHashTable} uporablja dve tabeli \texttt{tableA} in \texttt{tableB} ter dve hash funkciji $h_1$, $h_2$. Klju\v c je granuli poravnan naslov:
+\[
+	exttt{granule} = \texttt{align\_down}(\texttt{addr}, G).
+\]
+	exttt{lookup()} preveri najprej \texttt{tableA[h1(key)]}, nato \texttt{tableB[h2(key)]}. Vstavljanje uporablja verigo izseljevanja (\emph{eviction chain}) z omejitvijo \texttt{MAX\_EVICTIONS = 32}. Ob prekora\v citvi sledi \texttt{rehash()}: podvojitev tabel in ponovni vnos vseh \v zivih elementov.
+
+Tagiranje intervala pri alokaciji doda vnose za vse granule alokacije (vklju\v cno glavo bloka), brisanje pa jih simetri\v cno odstrani.
+
+\paragraph{\v Casovna in prostorska zahtevnost.}
+\begin{itemize}
+    \item \texttt{check\_tag}: $O(1)$ (najve\v c dve mesti)
+    \item \texttt{alloc}/\texttt{free} (tag del): amortizirano $O(k)$, z redkimi skoki zaradi \texttt{rehash}
+    \item prostor: $O(m)$, kjer je $m$ velikost tabel (v praksi podvojena zaradi dveh podtabel)
+\end{itemize}
+
+\paragraph{Posebnosti.}
+Najve\v cja prednost je predvidljiv \v cas poizvedbe. Slabost so redke, a drage faze \texttt{rehash} in relativno visok rezerviran prostor (dve tabeli, nizka \v zelena zasedenost).
+
+\subsection{Primerjava operacij med strukturami}
+
+Tabela \ref{tab:ops_impl_compare} povzema asimptoti\v cne stro\v ske in prakti\v cne lastnosti operacij v tej implementaciji.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Primerjava operacij med implementacijami}
+    \label{tab:ops_impl_compare}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lcccc}
+        \hline
+        	extbf{Operacija/lastnost} & \textbf{Shadow memory} & \textbf{Dvonivojska tabela} & \textbf{AVL drevo} & \textbf{Cuckoo hash} \\ \hline
+        	exttt{check\_tag} (najslab\v si primer) & $O(1)$ & $O(1)$ & $O(\log n)$ & $O(1)$ \\
+        	exttt{alloc} (tag del) & $O(k)$ & $O(k)$ & $O(\log n)$ & amort. $O(k)$ \\
+        	exttt{free} (tag del) & $O(k)$ & $O(k)$ & $O(\log n)$ & amort. $O(k)$ \\
+        Overhead pri redkih alokacijah & visok & nizek--zmeren & nizek & zmeren \\
+        Overhead pri gostih alokacijah & predvidljiv, vi\v sji & raste proti shadow & odvisen od $n$ & zmeren--vi\v sji \\
+        Cache lokalnost & zelo dobra & dobra & slab\v sa & dobra \\
+        Stabilnost latence & zelo stabilna & stabilna & stabilna, a vi\v sja & stabilna z redkimi skoki \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+Pri interpretaciji rezultatov v naslednjem poglavju je klju\v cno, da je \texttt{Memory} skupna osnova za vse pristope. Razlike v meritvah zato ve\v cinoma izhajajo iz podatkovnih struktur za oznake (ne iz razli\v cnega alokatorja glavnega pomnilnika), kar pove\v cuje notranjo veljavnost primerjave.

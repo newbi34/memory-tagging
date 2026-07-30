@@ -24,9 +24,11 @@ public:
 class ITaggingImpl {
 public:
     virtual ~ITaggingImpl() = default;
+
     virtual uint64_t alloc(size_t size, uint8_t tag) = 0;
     virtual void free(uint64_t addr) = 0;
     virtual bool check_tag(uint64_t addr, uint8_t expected) = 0;
+
     virtual size_t get_overhead_bytes() = 0;
     virtual std::string name() const = 0;
     virtual AccessStats get_stats() const = 0;
@@ -36,8 +38,10 @@ public:
 class Memory : public ITaggingImpl {
 public:
     explicit Memory(size_t size, size_t granule_size = 16);
+
     uint64_t alloc(size_t size, uint8_t tag) override;
     void free(uint64_t addr) override;
+    bool check_tag(uint64_t, uint8_t) override { return true; }
     void write(uint64_t addr, const uint8_t *data, size_t size);
     uint8_t *read(uint64_t addr);
 
@@ -45,7 +49,6 @@ public:
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
 
-    bool check_tag(uint64_t, uint8_t) override { return true; }
     size_t get_overhead_bytes() override { return 0; }
     std::string name() const override { return "Memory"; }
     virtual void print_overhead_bytes() = 0;
