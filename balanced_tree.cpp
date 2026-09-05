@@ -36,6 +36,11 @@ public:
 		Memory::free(addr);
 	}
 
+    void reset_shadow() {
+        destroy(root_);
+        root_ = nullptr;
+    }
+
 	bool check_tag(uint64_t addr, uint8_t expected) override {
 		BTreeNode* node = find(root_, addr);
 
@@ -62,13 +67,11 @@ private:
     BTreeNode* root_;
 
     int height(BTreeNode* node) {
-        stats_.tag_accesses++;
         stats_.bytes_transferred += sizeof(node->height);
         return node ? node->height : 0;
     }
 
     void update_height(BTreeNode* node) {
-        stats_.tag_accesses++;
         stats_.bytes_transferred += sizeof(node->height);
         stats_.pointer_accesses += 2;
 
@@ -77,7 +80,6 @@ private:
     }
 
     int balance_factor(BTreeNode* node) {
-        stats_.tag_accesses++;
         stats_.pointer_accesses += 2;
 
         return node ? height(node->left) - height(node->right) : 0;
@@ -215,7 +217,7 @@ private:
             node->size = successor->size;
             node->tag = successor->tag;
 
-            stats_.tag_accesses += 3;
+            stats_.tag_accesses++;
             stats_.bytes_transferred += sizeof(node->base_addr + node->size + node->tag);
 
             delete successor;
@@ -227,7 +229,7 @@ private:
     BTreeNode* find(BTreeNode* node, uint64_t addr) {
         if (!node) return nullptr;
 
-        stats_.tag_accesses += 2;
+        stats_.tag_accesses++;
         stats_.bytes_transferred += sizeof(node->base_addr + node->size);
 
         if (addr >= node->base_addr && addr < node->base_addr + node->size)

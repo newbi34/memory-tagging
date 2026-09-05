@@ -1,4 +1,5 @@
 #include "memory.h"
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -10,10 +11,13 @@ struct CuckooEntry {
 
 class CuckooHashTable : public Memory {
 public:
+    uint64_t granule_bits;
+
     CuckooHashTable(size_t mem_size, size_t table_size = 1024, size_t granule_size = 16)
         : Memory(mem_size, granule_size),
           table_size_(round_up_pow2(table_size)),
           tableA_(new CuckooEntry[table_size_]()),
+          granule_bits((uint64_t)std::log2(granule_size)),
           tableB_(new CuckooEntry[table_size_]()) {}
 
     ~CuckooHashTable() {
@@ -43,6 +47,15 @@ public:
     void free(uint64_t addr) override {
         size_t sz = alloc_size(addr);
         clear_range(addr, sz);
+
+        // Remove the tracking entry for this address
+        for (auto it = shadow_ranges_.begin(); it != shadow_ranges_.end(); ++it) {
+            if (it->first == addr) {
+                shadow_ranges_.erase(it);
+                break;
+            }
+        }
+
         Memory::free(addr);
     }
 
@@ -54,7 +67,6 @@ public:
         if (!e) 
             return expected == 0; // unallocated granules are considered untagged
 
-        stats_.tag_accesses++;
         stats_.bytes_transferred += sizeof(e->tag);
 
         return e->tag == expected;
@@ -64,17 +76,27 @@ public:
         size_t overhead = 0;
 
         for (const auto& range : shadow_ranges_) {
-            overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+            if (range.second % granule_size_ != 0) {
+                overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+            }
         }
 
         return 2 * table_size_ * sizeof(CuckooEntry) + overhead;
+    }
+
+    void reset_shadow() {
+        for (size_t i = 0; i < table_size_; ++i) {
+            tableA_[i] = CuckooEntry{};
+            tableB_[i] = CuckooEntry{};
+        }
+        shadow_ranges_.clear();
     }
 
     void print_overhead_bytes() {
         std::cout << "Overhead bytes: " << get_overhead_bytes() << "\n";
     }
 
-    std::string name() const override { return "CuckooHashTable(g=" + std::to_string(granule_size_) + ")"; }
+    std::string name() const override { return "CuckooHashTable(p=" + std::to_string(table_size_) + " g=" + std::to_string(granule_size_) + ")"; }
     AccessStats get_stats() const override { return stats_; }
     void reset_stats() override { stats_ = AccessStats(); }
 
@@ -89,14 +111,14 @@ private:
     CuckooEntry* tableB_;
 
     size_t h1(uint64_t granule_addr) {
-        uint64_t k = (granule_addr >> 4); // granule index
-        k ^= (uint64_t)rehash_count_ * 0xdeadbeefULL;
+        uint64_t k = (granule_addr >> granule_bits); // granule index
+        k ^= (uint64_t)rehash_count_ * 0x7a5b149eULL;
         return (k * 0x9e3779b97f4a7c15ULL) >> (64 - index_bits());
     }
 
     size_t h2(uint64_t granule_addr) {
-        uint64_t k = (granule_addr >> 4);
-        k ^= (uint64_t)rehash_count_ * 0xcafebabeULL;
+        uint64_t k = (granule_addr >> granule_bits);
+        k ^= (uint64_t)rehash_count_ * 0xa6b21179ULL;
         return (k * 0x6c62272e07bb0142ULL) >> (64 - index_bits());
     }
 
@@ -104,7 +126,6 @@ private:
         size_t bits = 0;
         size_t n = table_size_;
 
-        stats_.tag_accesses++;
         stats_.bytes_transferred += sizeof(table_size_);
 
         while (n > 1) { n >>= 1; ++bits; }
@@ -221,7 +242,6 @@ private:
         std::vector<CuckooEntry> live;
         live.reserve(table_size_);
 
-        stats_.tag_accesses += 2 * table_size_;
         stats_.bytes_transferred += 2 * table_size_ * sizeof(CuckooEntry);
 
         for (size_t i = 0; i < table_size_; ++i) {

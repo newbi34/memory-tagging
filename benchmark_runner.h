@@ -27,6 +27,7 @@ public:
         for (int run = 0; run < NUM_RUNS; ++run) {
             double ns = execute_once(mem, w, result);
             latencies.push_back(ns);
+            //mem.reset_shadow();
         }
 
         double avg, mn, mx, stddev;
@@ -45,6 +46,7 @@ public:
         result.throughput_ops_sec = ops_per_run / (avg / 1e9);
 
         result.memory_overhead_bytes = mem.get_stats().peak_overhead_bytes;
+        //result.memory_overhead_bytes = mem.get_overhead_bytes();
 
         return result;
     }
@@ -75,6 +77,8 @@ private:
             }
             live.push_back({addr, tag});
 
+            if (w.include_global_random_access) goto skip;
+
             // perform accesses_per_alloc check_tag calls on this allocation
             for (int a = 0; a < w.accesses_per_alloc; ++a) {
                 uint64_t offset;
@@ -96,6 +100,7 @@ private:
                 live.pop_back();
             }
 
+            skip:
             // random global access test: check a random address in the entire memory space
             if (w.include_global_random_access) {
                 size_t mem_size = mem.get_size();

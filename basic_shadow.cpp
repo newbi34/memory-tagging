@@ -17,16 +17,30 @@ public:
         if (addr == INVALID) return INVALID;
         tag_range(addr, size, tag);
 
-        shadow_ranges_.push_back({addr, size});
+        //shadow_ranges_.push_back({addr, size});
 
-        stats_.peak_overhead_bytes = std::max(stats_.peak_overhead_bytes, get_overhead_bytes());
+        //stats_.peak_overhead_bytes = std::max(stats_.peak_overhead_bytes, get_overhead_bytes());
 
         return addr;
+    }
+
+    void reset_shadow() {
+        std::fill(shadow_, shadow_ + shadow_size_, 0);
+        shadow_ranges_.clear();
     }
 
     void free(uint64_t addr) override {
         size_t size = alloc_size(addr);
         tag_range(addr, size, 0);
+
+        // Remove the tracking entry for this address
+        /*for (auto it = shadow_ranges_.begin(); it != shadow_ranges_.end(); ++it) {
+            if (it->first == addr) {
+                shadow_ranges_.erase(it);
+                break;
+            }
+        }*/
+
         Memory::free(addr);
     }
 
@@ -44,7 +58,9 @@ public:
         uint64_t overhead = 0;
 
         for (const auto& range : shadow_ranges_) {
-            overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+            if (range.second % granule_size_ != 0) {
+                overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+            }
         }
 
         return shadow_size_ + overhead;
@@ -63,7 +79,7 @@ public:
     }
 
 private:
-    void tag_range(uint64_t addr, size_t size, uint8_t tag) {
+    /*void tag_range(uint64_t addr, size_t size, uint8_t tag) {
         // first granule that overlaps with [addr, addr+size)
         uint64_t first_granule = addr / granule_size_;
 
@@ -76,6 +92,26 @@ private:
             stats_.tag_accesses++;
             stats_.bytes_transferred++;
         }
+    }*/
+    void tag_range(uint64_t addr, size_t size, uint8_t tag) {
+        if (size == 0) return;
+
+        // Calculate granule bounds
+        uint64_t first_granule = addr / granule_size_;
+        uint64_t last_granule  = (addr + size - 1) / granule_size_;
+
+        if (first_granule >= shadow_size_) return;
+
+        // Clamp to shadow boundary
+        last_granule = std::min(last_granule, shadow_size_ - 1);
+        size_t count = static_cast<size_t>(last_granule - first_granule + 1);
+
+        // Fast contiguous memory write (auto-vectorized or memset equivalent)
+        std::fill_n(shadow_ + first_granule, count, tag);
+
+        // Update statistics in O(1) instead of per-iteration
+        stats_.tag_accesses += count;
+        stats_.bytes_transferred += count;
     }
 
     // we dont consider looking up grandule/shadow size as memory access since its a constant and can be hardcoded in hardware

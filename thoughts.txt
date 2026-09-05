@@ -103,6 +103,8 @@ Možne razširitve — bucketized cuckoo, shadow memory v OS, stack tagging -11
 13: https://arxiv.org/pdf/2605.13210
 14: https://ctsrd-cheri.github.io/morello-early-performance-results/performance-methodology/baseline-and-comparison-framework.html
 15: https://dionisiodeveloper.medium.com/why-c-is-still-relevant-and-worth-mastering-in-2025-c3372b8add56
+16: https://hpc.llnl.gov/software/development-environment-software/valgrind-memcheck-tool
+17: https://valgrind.org/docs/manual/mc-manual.html/manual-core-adv.html
 
 https://en.wikipedia.org/wiki/AVL_tree
 https://en.wikipedia.org/wiki/Valgrind
@@ -114,3 +116,6 @@ https://www.feustel.us/Feustel%20&%20Associates/Advantages.pdf
 http://feustel.us/Feustel%20&%20Associates/R2.pdf
 
 https://developer.arm.com/documentation/102925/0100/ (link to pdf)
+
+
+noindent, angl?, typos

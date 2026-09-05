@@ -53,6 +53,7 @@ public:
     std::string name() const override { return "Memory"; }
     virtual void print_overhead_bytes() = 0;
     size_t get_size() const { return size_; }
+    void reset_shadow() { /* no-op for base Memory */ }
 
     size_t alloc_size(uint64_t addr) const;
 
@@ -63,6 +64,7 @@ protected:
     size_t size_;
     AccessStats stats_;
     size_t granule_size_;
+    size_t next_free_offset_;
 
 private:
     uint64_t find_free_block(size_t size);

@@ -10,20 +10,28 @@ public:
           page_size_(page_size),
           granule_size_(granule_size),
           granules_per_page_(page_size / granule_size),
-          num_pages_(mem_size / page_size),
-          table_(new uint8_t*[mem_size / page_size]()) {
+                    num_pages_((mem_size + page_size - 1) / page_size),
+                    table_(new uint8_t*[(mem_size + page_size - 1) / page_size]()) {
 
         // sanity checks
+                assert(page_size > 0 && "page size must be > 0");
+                assert(granule_size > 0 && "granule size must be > 0");
         assert(page_size >= granule_size && "page must be larger than granule");
         assert(page_size % granule_size == 0 && "page must be multiple of granule");
-        assert(granule_size > 0 && (granule_size & (granule_size - 1)) == 0 && "granule size must be a power of two");
-        assert(page_size > 0 && (page_size & (page_size - 1)) == 0 && "page size must be a power of two");
     }
 
     ~TwoLevelTable() {
         for (size_t i = 0; i < num_pages_; ++i)
             delete[] table_[i];
         delete[] table_;
+    }
+
+    void reset_shadow() {
+        for (size_t i = 0; i < num_pages_; ++i) {
+            delete[] table_[i];
+            table_[i] = nullptr;
+        }
+        shadow_ranges_.clear();
     }
 
     uint64_t alloc(size_t size, uint8_t tag) override {
@@ -43,6 +51,15 @@ public:
     void free(uint64_t addr) override {
         size_t size = alloc_size(addr);
         tag_range(addr, size, 0);
+
+        // Remove the tracking entry for this address
+        for (auto it = shadow_ranges_.begin(); it != shadow_ranges_.end(); ++it) {
+            if (it->first == addr) {
+                shadow_ranges_.erase(it);
+                break;
+            }
+        }
+
         Memory::free(addr);
     }
 
@@ -69,9 +86,11 @@ public:
             if (table_[i])
                 overhead += granules_per_page_ * sizeof(uint8_t); // level 2
 
-        //for (const auto& range : shadow_ranges_) {
-        //    overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
-        //}
+        for (const auto& range : shadow_ranges_) {
+            if (range.second % granule_size_ != 0) {
+                overhead += granule_size_ - (range.second % granule_size_); // padding for last granule
+            }
+        }
             
         return overhead;
     }
@@ -84,10 +103,23 @@ public:
         std::cout << std::dec
                   << "Page size       : " << page_size_    << " bytes\n"
                   << "Granule size    : " << granule_size_ << " bytes\n"
-                  << "Granules/page   : " << granules_per_page_ << "\n"
-                  << "Level 1 bytes   : " << l1 << "\n"
-                  << "Level 2 bytes   : " << l2 << "\n"
-                  << "Total overhead  : " << l1 + l2 << "\n";
+                  << "Granules/page   : " << granules_per_page_ << "\n";
+
+            size_t table_overhead = num_pages_ * sizeof(uint8_t*);
+            for (size_t i = 0; i < num_pages_; ++i)
+                if (table_[i])
+                    table_overhead += granules_per_page_ * sizeof(uint8_t);
+
+            size_t padding_overhead = 0;
+            for (const auto& range : shadow_ranges_) {
+                if (range.second % granule_size_ != 0) {
+                    padding_overhead += granule_size_ - (range.second % granule_size_);
+                }
+            }
+
+            std::cout << "Table structure: " << table_overhead 
+                      << " B | Padding: " << padding_overhead 
+                      << " B | Range count: " << shadow_ranges_.size() << "\n";
     }
 
     std::string name() const override {
@@ -98,10 +130,18 @@ public:
     void reset_stats() override { stats_ = AccessStats(); }
 
 private:
+    static uint64_t align_down(uint64_t value, uint64_t alignment) {
+        return (value / alignment) * alignment;
+    }
+
+    static uint64_t align_up(uint64_t value, uint64_t alignment) {
+        return ((value + alignment - 1) / alignment) * alignment;
+    }
+
     void tag_range(uint64_t addr, size_t size, uint8_t tag) {
         // align down to granule boundary and cover all touched granules
-        uint64_t granule_start = addr & ~(granule_size_ - 1);
-        uint64_t granule_end   = (addr + size + granule_size_ - 1) & ~(granule_size_ - 1);
+        uint64_t granule_start = align_down(addr, granule_size_);
+        uint64_t granule_end   = align_up(addr + size, granule_size_);
 
         for (uint64_t cur = granule_start; cur < granule_end; cur += granule_size_) {
             uint64_t page_index = cur / page_size_;

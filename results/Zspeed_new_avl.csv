@@ -1,0 +1,7 @@
+impl,workload,avg_latency_ns,min_latency_ns,max_latency_ns,stddev_latency_ns,throughput_ops_sec,memory_overhead_bytes,live_allocations,correctness_violations,tag_accesses,pointer_accesses,bytes_transferred,alloc_count,free_count,bytes_allocated,simulated_accesses,peak_overhead_bytes
+BalancedTree,small_sizes,3.29166e+06,3.1295e+06,3.7714e+06,168319,5.16457e+07,0,10000,0,43685580,62976060,441541200,200000,200000,0,0,0
+BalancedTree,large_sizes,379530,370700,451500,17223.2,2.23961e+06,0,50,0,85260,127500,873040,1000,1000,0,0,0
+BalancedTree,mixed_sizes,652410,594000,796200,38607.2,2.60572e+07,0,1000,0,3171500,4631100,32233040,20000,20000,0,0,0
+BalancedTree,realloc,792520,740400,1.0101e+06,54365.7,2.27124e+07,0,500,0,2829000,4067400,28506720,20000,20000,0,0,0
+BalancedTree,random_access,644445,626900,680900,14403.2,2.63793e+07,0,1000,0,3171500,4631100,32233040,20000,20000,0,0,0
+BalancedTree,global_random_access,1.2926e+06,1.1205e+06,1.4973e+06,72319.2,1.31518e+07,0,1000,0,474762,1954313,10659136,20000,20000,0,0,0
