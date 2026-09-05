@@ -1,1 +1,1 @@
-Deli kode so bili 
+Ideje in struktura je bila zasnovana z človeško inteligenco. Nekateri posamezni odseki kode so bili narejeni s pomočjo velikega jezikovnega modela claude sonet 5. Takšni izseki kode so bili preverjeni ter popravljeni po potrebi.
